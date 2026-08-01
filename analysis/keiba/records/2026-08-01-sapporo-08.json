@@ -1,0 +1,41 @@
+{
+  "race_id": "2026-08-01-sapporo-08",
+  "date": "2026-08-01",
+  "course": "札幌",
+  "race_no": 8,
+  "name": "3歳以上1勝クラス",
+  "klass": "3歳上1勝",
+  "surface": "ダート",
+  "distance_m": 1700,
+  "field_size": null,
+  "status": "partial",
+  "note": "出走頭数が未記録。3連単配当15,250円だけでは人気順位が分からず逆算もできない。全馬オッズ表も未取得のため log loss のみ算出可能。",
+  "quotes": [
+    {
+      "source": "紙面",
+      "odds": { "4": 2.6 },
+      "declared_overround": 1.24,
+      "overround_basis": "measured",
+      "covers": null,
+      "note": "逆数和1.24は全馬から実測(概算)。4番エスシービクトリアが印44で本命。covers は全馬分の実測なので null。",
+      "partial_sums": {}
+    },
+    {
+      "source": "確定",
+      "odds": { "4": 1.4 },
+      "declared_overround": 1.25,
+      "overround_basis": "assumed_takeout",
+      "covers": null,
+      "note": "確定オッズの逆数和は未実測。単勝払戻率80%から1.25と仮定した。",
+      "partial_sums": {}
+    }
+  ],
+  "result": {
+    "order": [4],
+    "payouts": {
+      "3連単": 15250,
+      "備考": "紙面本命の4番エスシービクトリアがそのまま1着。紙面2.6倍に対し確定1.4倍で、方向は7Rと同じく紙面が1番人気を過小評価。"
+    }
+  },
+  "career_starts": {}
+}

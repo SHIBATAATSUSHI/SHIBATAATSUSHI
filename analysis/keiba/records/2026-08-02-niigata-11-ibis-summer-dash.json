@@ -1,0 +1,71 @@
+{
+  "race_id": "2026-08-02-niigata-11-ibis-summer-dash",
+  "date": "2026-08-02",
+  "course": "新潟",
+  "race_no": 11,
+  "name": "アイビスサマーダッシュ",
+  "klass": "GIII",
+  "surface": "芝",
+  "distance_m": 1000,
+  "field_size": null,
+  "status": "partial",
+  "note": "情報流入曲線を測るためのテンプレート。前売り値のみ取得済みで、以降4時点は空欄。レース番号11とフルゲート18頭は未確認のため、出馬表で確定させること。同一市場内で20時間に情報がどれだけ入るかを測る設計で、紙面→確定より乖離は小さいはず、というのが反証可能な予測。",
+  "quotes": [
+    {
+      "source": "前売り",
+      "captured_at": null,
+      "odds": { "6": 2.2 },
+      "declared_overround": 1.25,
+      "overround_basis": "assumed_takeout",
+      "covers": null,
+      "partial_sums": { "top10": 1.154 },
+      "note": "6番ピューロマジック2.2倍。実測できたのは上位10頭の逆数和1.154のみで、これは部分和なので正規化には使えない(これで割ると確率を過大評価する)。実際のプールなので全馬の逆数和は控除率どおり1.25とみなす。整合性検査: 残りの馬が持つ逆数質量は1.25-1.154=0.096。仮に18頭立てなら残り8頭の平均単勝は約83倍で、直線1000mの下位人気として妥当な水準。取得時刻を必ず埋めること(20時間の測定の基点になる)。"
+    },
+    {
+      "source": "当日午前",
+      "captured_at": null,
+      "odds": {},
+      "declared_overround": null,
+      "overround_basis": "measured",
+      "covers": null,
+      "partial_sums": {},
+      "note": "未取得。可能なら全馬のオッズ表を撮る(全馬揃えばBrier・エントロピー・KLが解禁される)。"
+    },
+    {
+      "source": "締切60分前",
+      "captured_at": null,
+      "odds": {},
+      "declared_overround": null,
+      "overround_basis": "measured",
+      "covers": null,
+      "partial_sums": {},
+      "note": "未取得。"
+    },
+    {
+      "source": "締切5分前",
+      "captured_at": null,
+      "odds": {},
+      "declared_overround": null,
+      "overround_basis": "measured",
+      "covers": null,
+      "partial_sums": {},
+      "note": "未取得。プロの資金が入るのはこの帯なので、情報流入曲線の形はここで決まる。"
+    },
+    {
+      "source": "確定",
+      "captured_at": null,
+      "odds": {},
+      "declared_overround": null,
+      "overround_basis": "measured",
+      "covers": null,
+      "partial_sums": {},
+      "note": "未取得。"
+    }
+  ],
+  "result": null,
+  "career_starts": {},
+  "reference": {
+    "馬連6-16": 6.5,
+    "備考": "馬連は払戻率77.5%で単勝と控除率が違うため、単勝の逆数和とは同じ土俵で比較しない。参考値として保持するだけでスコアには使わない。"
+  }
+}

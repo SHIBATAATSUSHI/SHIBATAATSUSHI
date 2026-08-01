@@ -1,0 +1,16 @@
+{
+  "race_id": "2026-08-01-sapporo-09",
+  "date": "2026-08-01",
+  "course": "札幌",
+  "race_no": 9,
+  "name": "釧路湿原特別",
+  "klass": "",
+  "surface": "",
+  "distance_m": 0,
+  "field_size": null,
+  "status": "pending",
+  "note": "予想オッズ欄を撮り損ねたため未判定。事前価格がない以上、事後の結果だけを後から足しても選択バイアスが入るので、このレースはスコアの母集団から除外したまま欠測として残す。紙面が入手できれば partial に昇格させる。",
+  "quotes": [],
+  "result": null,
+  "career_starts": {}
+}

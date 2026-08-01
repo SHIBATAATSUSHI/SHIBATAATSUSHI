@@ -5,7 +5,7 @@
 ## ディレクトリ構成
 
 - `/scripts` — 単発Python
-- `/analysis` — 動作分析・HealthKit
+- `/analysis` — データ分析(動作分析・HealthKit、競馬予想の較正台帳 `keiba/`)
 - `/experiments` — 試行
 - `/docs` — ドキュメント・文章コンテンツ
 
