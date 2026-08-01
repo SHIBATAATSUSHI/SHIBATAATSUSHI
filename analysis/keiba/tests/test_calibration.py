@@ -20,11 +20,21 @@ from calibration import (  # noqa: E402
     concentration,
     entropy,
     kl_divergence,
+    log_gap,
     log_loss,
+    movement_share,
     normalize,
     overround,
 )
-from schema import BASIS_ASSUMED, InsufficientQuote, Quote, load_races  # noqa: E402
+from report import _h3_market_vs_paper, focus_horse  # noqa: E402
+from schema import (  # noqa: E402
+    BASIS_ASSUMED,
+    InsufficientQuote,
+    Quote,
+    Race,
+    Result,
+    load_races,
+)
 
 
 class TestNormalization(unittest.TestCase):
@@ -192,6 +202,96 @@ class TestRecords(unittest.TestCase):
         self.assertEqual(race.status, "pending")
         self.assertEqual(race.quotes, [])
         self.assertIsNone(race.result)
+
+
+class TestInformationInflow(unittest.TestCase):
+    """H3(情報流入)の計算。合成データで論理だけを検証する。
+
+    ここで使う数字はすべて架空。実測値は records/ にしか置かない。
+    """
+
+    def _synthetic_race(self) -> Race:
+        """紙面から確定まで単調に人気化していく18頭立ての架空レース。
+
+        6番の単勝: 紙面4.0 → 前売り2.8 → 当日午前2.5 → 締切5分前2.2 → 確定2.0
+        """
+        quotes = [
+            Quote(source="紙面", odds={6: 4.0}, declared_overround=1.25, captured_at="2026-08-01T18:00:00"),
+            Quote(source="前売り", odds={6: 2.8}, declared_overround=1.25, captured_at="2026-08-01T19:00:00"),
+            Quote(source="当日午前", odds={6: 2.5}, declared_overround=1.25, captured_at="2026-08-02T10:00:00"),
+            Quote(source="締切5分前", odds={6: 2.2}, declared_overround=1.25, captured_at="2026-08-02T15:20:00"),
+            Quote(source="確定", odds={6: 2.0}, declared_overround=1.25, captured_at="2026-08-02T15:40:00"),
+        ]
+        return Race(
+            race_id="synthetic",
+            date="2026-08-02",
+            course="架空",
+            race_no=11,
+            field_size=18,
+            quotes=quotes,
+            result=Result(order=[6]),
+        )
+
+    def test_movement_share_is_monotonic(self):
+        """単調に人気化するなら進捗も単調に増え、確定時点で1.0になる。"""
+        race = self._synthetic_race()
+        series = [q for q in race.timeline() if q.source != "紙面"]
+        p_start = series[0].probability(6, race.field_size)
+        p_final = series[-1].probability(6, race.field_size)
+        shares = [movement_share(p_start, q.probability(6, race.field_size), p_final) for q in series]
+        self.assertAlmostEqual(shares[0], 0.0, places=12)
+        self.assertAlmostEqual(shares[-1], 1.0, places=12)
+        self.assertEqual(shares, sorted(shares))
+
+    def test_h3_holds_when_market_moves_less_than_paper(self):
+        """紙面4.0→確定2.0より、前売り2.8→確定2.0のほうがギャップが小さい。"""
+        race = self._synthetic_race()
+        final = race.quote("確定")
+        d_paper = abs(
+            log_gap(race.quote("紙面").probability(6, 18), final.probability(6, 18))
+        )
+        d_market = abs(
+            log_gap(race.quote("前売り").probability(6, 18), final.probability(6, 18))
+        )
+        self.assertLess(d_market, d_paper)
+        self.assertAlmostEqual(d_paper, math.log(2.0), places=12)
+        self.assertAlmostEqual(d_market, math.log(1.4), places=12)
+
+    def test_log_gap_is_symmetric_unlike_ratio(self):
+        """対数ギャップは向きを変えても大きさが同じ。倍率だと2倍と0.5倍で非対称になる。"""
+        self.assertAlmostEqual(log_gap(0.2, 0.4), -log_gap(0.4, 0.2), places=12)
+
+    def test_movement_share_undefined_when_no_movement(self):
+        """始点と終点が同じなら進捗は定義できない。"""
+        self.assertIsNone(movement_share(0.3, 0.3, 0.3))
+
+    def test_focus_horse_falls_back_to_favourite(self):
+        """結果が出る前は最初の時点の1番人気を追う。"""
+        race = self._synthetic_race()
+        race.result = None
+        self.assertEqual(focus_horse(race), 6)
+
+    def test_focus_horse_is_winner_after_result(self):
+        self.assertEqual(focus_horse(self._synthetic_race()), 6)
+
+
+class TestH3Confounding(unittest.TestCase):
+    """H3は同一レース内でしか判定しない、という制約が守られていること。"""
+
+    def test_race_without_paper_is_not_tested(self):
+        """紙面のないレースは判定不能として扱う(他レースの紙面と比べない)。
+
+        アイビスの前売り→確定を7R・8Rの紙面→確定と比べると、
+        時差の効果(H3)とクラスの情報厚みの効果(H2)が分離できなくなる。
+        """
+        races = load_races(KEIBA_DIR / "records")
+        ibis = next(r for r in races if "ibis" in r.race_id)
+        lines = _h3_market_vs_paper(races)
+        body = "\n".join(lines)
+        self.assertIn("判定", body)
+        # 紙面スロットは存在するが中身は空なので、比較対象にならない
+        self.assertIsNotNone(ibis.quote("紙面"))
+        self.assertEqual(ibis.quote("紙面").odds, {})
 
 
 if __name__ == "__main__":

@@ -22,9 +22,11 @@ from calibration import (  # noqa: E402
     divergence_ratio,
     entropy,
     kl_divergence,
+    log_gap,
     log_loss,
+    movement_share,
 )
-from schema import InsufficientQuote, Race, load_races  # noqa: E402
+from schema import InsufficientQuote, Quote, Race, load_races  # noqa: E402
 
 RECORDS_DIR = Path(__file__).resolve().parent / "records"
 
@@ -32,6 +34,8 @@ RECORDS_DIR = Path(__file__).resolve().parent / "records"
 BASELINE_SOURCE = "確定"
 # 較正リーダーボードの主対象。紙面がこれに勝てているかが最初の問い。
 PAPER_SOURCE = "紙面"
+# 市場が開いた最初の時点。ここから確定までが「同一市場内の情報流入」。
+MARKET_OPEN_SOURCE = "前売り"
 
 DASH = "—"
 
@@ -121,6 +125,56 @@ def race_report(race: Race) -> list[str]:
             lines.append(f"      └ {row['skip']}")
 
     lines.extend(_race_comparisons(race))
+    lines.extend(_inflow_section(race))
+    return lines
+
+
+def focus_horse(race: Race) -> int | None:
+    """情報流入曲線を追う対象馬。
+
+    結果が出ていれば1着馬。まだなら最初の時点での1番人気(=最も金が集まった馬)。
+    結果を待たずに曲線を引けるようにするため、事前に決め打ちできる規則にしてある。
+    """
+    if race.result is not None:
+        return race.result.winner
+    for quote in race.timeline():
+        if quote.odds:
+            return min(quote.odds, key=lambda h: quote.odds[h])
+    return None
+
+
+def _inflow_section(race: Race) -> list[str]:
+    """情報流入曲線。同一市場内で確定値までの動きがいつ入ったかを見る。
+
+    3時点以上そろって初めて「曲線」になるので、それ未満では出さない。
+    """
+    horse = focus_horse(race)
+    final = race.quote(BASELINE_SOURCE)
+    if horse is None or final is None or horse not in final.odds:
+        return []
+
+    series = [q for q in race.timeline() if horse in q.odds and q.source != PAPER_SOURCE]
+    if len(series) < 3:
+        return []
+
+    try:
+        p_final = final.probability(horse, race.field_size)
+        p_start = series[0].probability(horse, race.field_size)
+    except InsufficientQuote:
+        return []
+
+    lines = ["", f"  情報流入曲線 ({horse}番) — 確定までの動きの何割が済んでいたか"]
+    for quote in series:
+        try:
+            p = quote.probability(horse, race.field_size)
+        except InsufficientQuote:
+            continue
+        share = movement_share(p_start, p, p_final)
+        stamp = quote.captured_at or "時刻未記録"
+        lines.append(
+            f"    {quote.source:<10}{stamp:<22}{quote.odds[horse]:>7.1f}倍"
+            f"  p={p:.4f}  進捗={'—' if share is None else f'{share * 100:5.1f}%'}"
+        )
     return lines
 
 
@@ -173,6 +227,9 @@ def aggregate(races: list[Race]) -> list[str]:
 
     # --- 仮説H2: 乖離はクラスの情報厚みで決まる ---
     lines.extend(_divergence_by_class(races))
+
+    # --- 仮説H3: 同一市場内の情報流入は紙面→確定より小さい ---
+    lines.extend(_h3_market_vs_paper(races))
 
     lines.append("")
     lines.append("  未取得・保留:")
@@ -233,6 +290,62 @@ def _divergence_by_class(races: list[Race]) -> list[str]:
     for klass, ratio, rid in sorted(rows, key=lambda r: -r[1]):
         lines.append(f"    {klass:<12}{ratio:>6.2f}倍  ({rid})")
     lines.append("    ※ キャリアの浅いクラスほど大きく出るはず、が仮説。共変量は career_starts に入れる。")
+    return lines
+
+
+def _gap(quote: Quote | None, final: Quote, horse: int, field_size: int | None) -> float | None:
+    """ある時点から確定までの対数ギャップの大きさ。測れなければ None。"""
+    if quote is None or horse not in quote.odds or horse not in final.odds:
+        return None
+    try:
+        return abs(log_gap(quote.probability(horse, field_size), final.probability(horse, field_size)))
+    except InsufficientQuote:
+        return None
+
+
+def _h3_market_vs_paper(races: list[Race]) -> list[str]:
+    """H3: 同一市場内の情報流入は、紙面→確定の乖離より小さい。
+
+    必ず同一レース内で比べる。紙面→確定を別レース(別クラス)の値と比べると、
+    情報厚みの差(H2)と区別がつかなくなり、何を測ったのか言えなくなる。
+    """
+    lines = ["", "  H3 同一市場内の情報流入 vs 紙面→確定(同一レース内で比較)"]
+    testable, confounded = [], []
+
+    for race in races:
+        final = race.quote(BASELINE_SOURCE)
+        horse = focus_horse(race)
+        if final is None or horse is None:
+            continue
+        field_size = race.field_size
+        d_paper = _gap(race.quote(PAPER_SOURCE), final, horse, field_size)
+        d_market = _gap(race.quote(MARKET_OPEN_SOURCE), final, horse, field_size)
+
+        if d_paper is not None and d_market is not None:
+            testable.append((race, horse, d_paper, d_market))
+        elif d_paper is not None or d_market is not None:
+            have = "紙面のみ" if d_paper is not None else "前売りのみ"
+            confounded.append((race, have))
+
+    for race, horse, d_paper, d_market in testable:
+        holds = d_market < d_paper
+        lines.append(
+            f"    {race.race_id} ({horse}番): "
+            f"|紙面→確定|={d_paper:.3f}  |前売り→確定|={d_market:.3f}  "
+            f"→ H3{'と整合' if holds else 'に反する'}"
+        )
+    if testable:
+        k = sum(1 for _, _, dp, dm in testable if dm < dp)
+        n = len(testable)
+        lines.append(f"    {k}/{n} で整合、両側p={binomial_two_sided_p(k, n):.4f}")
+
+    for race, have in confounded:
+        lines.append(
+            f"    {race.race_id}: {have}のため判定不能。"
+            "他レースの紙面と比べるとH2(情報厚み)と交絡するので比較しない"
+        )
+    if not testable and not confounded:
+        lines.append("    判定可能なレースなし")
     return lines
 
 

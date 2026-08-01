@@ -92,6 +92,30 @@ def divergence_ratio(odds_before: float, odds_after: float) -> float:
     return odds_before / odds_after
 
 
+def log_gap(p_from: float, p_to: float) -> float:
+    """2時点間の確率の対数差 ln(p_to / p_from)。
+
+    乖離倍率(比)ではなく対数を使う理由は2つ。加法的なので時点をまたいで足せること、
+    そして倍率が「2倍」と「0.5倍」で非対称になるのを避けられること。
+    符号が向きを表す。正なら事前が過小評価していた。
+    """
+    if p_from <= 0.0 or p_to <= 0.0:
+        return math.inf
+    return math.log(p_to / p_from)
+
+
+def movement_share(p_start: float, p_at: float, p_final: float) -> float | None:
+    """最終値までの動きのうち、その時点までに何割が済んでいたか。
+
+    情報流入曲線の縦軸。0なら出発点のまま、1なら確定値に到達済み。
+    1を超えることもある(行き過ぎて戻る)。始点と終点が同じなら測定不能でNone。
+    """
+    total = log_gap(p_start, p_final)
+    if total == 0.0 or math.isinf(total):
+        return None
+    return log_gap(p_start, p_at) / total
+
+
 def binomial_two_sided_p(k: int, n: int, p: float = 0.5) -> float:
     """符号検定用の両側二項検定p値。
 
