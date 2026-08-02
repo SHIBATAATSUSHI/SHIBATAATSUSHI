@@ -4,5 +4,8 @@ __pycache__/
 .venv/
 venv/
 
+# データベース(記録の生値は records/*.json とCSVが正、DBは再生成できる)
+*.sqlite3
+
 # OS
 .DS_Store

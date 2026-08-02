@@ -116,6 +116,64 @@ def movement_share(p_start: float, p_at: float, p_final: float) -> float | None:
     return log_gap(p_start, p_at) / total
 
 
+def wilson_interval(k: int, n: int, z: float = 1.959963985) -> tuple[float, float]:
+    """二項比率のWilson信頼区間(既定95%)。
+
+    単純な正規近似(k/n ± z*sqrt(p(1-p)/n))は、勝率が0や1に近いビンで
+    区間が0未満や1超になって使い物にならない。穴馬のビンは実測勝率が
+    数%になるため、そこで壊れない区間が要る。
+    """
+    if n == 0:
+        return (0.0, 1.0)
+    phat = k / n
+    denom = 1.0 + z * z / n
+    center = (phat + z * z / (2 * n)) / denom
+    half = z * math.sqrt(phat * (1.0 - phat) / n + z * z / (4 * n * n)) / denom
+    return (max(0.0, center - half), min(1.0, center + half))
+
+
+def reliability_bins(
+    points: list[tuple[float, bool]], n_bins: int = 10
+) -> list[dict[str, float | int]]:
+    """(予測確率, 的中したか) の並びを件数等分のビンに割り、実測勝率と突き合わせる。
+
+    ビン分割をオッズの等間隔ではなく**件数等分**にするのは、穴馬側は件数が多いうえに
+    オッズの裾が長く、等間隔だと最終ビンだけ極端に不安定になるため。
+
+    Returns:
+        ビンごとの dict。predicted(平均予測確率) と observed(実測勝率) が
+        揃っていれば較正されている。lo/hi は実測勝率のWilson95%区間。
+    """
+    if not points:
+        return []
+    ordered = sorted(points, key=lambda x: x[0])
+    n = len(ordered)
+    n_bins = max(1, min(n_bins, n))
+
+    bins = []
+    for i in range(n_bins):
+        start = i * n // n_bins
+        end = (i + 1) * n // n_bins
+        chunk = ordered[start:end]
+        if not chunk:
+            continue
+        wins = sum(1 for _, won in chunk if won)
+        lo, hi = wilson_interval(wins, len(chunk))
+        bins.append(
+            {
+                "n": len(chunk),
+                "wins": wins,
+                "p_min": chunk[0][0],
+                "p_max": chunk[-1][0],
+                "predicted": sum(p for p, _ in chunk) / len(chunk),
+                "observed": wins / len(chunk),
+                "lo": lo,
+                "hi": hi,
+            }
+        )
+    return bins
+
+
 def binomial_two_sided_p(k: int, n: int, p: float = 0.5) -> float:
     """符号検定用の両側二項検定p値。
 
