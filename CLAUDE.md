@@ -8,6 +8,7 @@
 - `/analysis` — 動作分析・HealthKit
 - `/experiments` — 試行
 - `/docs` — ドキュメント・文章コンテンツ
+- `/docs/note` — note に投稿する記事。投稿は `uv run scripts/note_post.py`(手順は `docs/note-posting.md`)
 
 ## コーディング規約
 
