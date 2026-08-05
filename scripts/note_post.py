@@ -16,6 +16,7 @@ import argparse
 import json
 import sys
 
+import note_lint
 import note_markdown
 from note_api import AuthError, NoteClient, NoteError, load_accounts, resolve_account
 
@@ -45,9 +46,26 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--json", action="store_true", help="結果を JSON で出力する")
     parser.add_argument(
+        "--skip-lint", action="store_true", help="投稿前の文体チェックを飛ばす"
+    )
+    parser.add_argument(
         "--list-accounts", action="store_true", help="設定済みのアカウント一覧を表示する"
     )
     return parser
+
+
+def run_lint(path: str, *, quiet: bool) -> int:
+    """投稿前に文体を検査する。エラーがあれば投稿を止めるため件数を返す。
+
+    警告は止めない(見落としを拾う道具であって、縛る道具ではないため)。
+    """
+    report = note_lint.lint_file(path)
+    if not quiet and report.findings:
+        print(note_lint.format_report(report))
+        print()
+    if report.errors and not quiet:
+        print("文体チェックでエラーがあるため投稿しません(--skip-lint で無視できます)。")
+    return len(report.errors)
 
 
 def cmd_list_accounts(as_json: bool) -> int:
@@ -83,8 +101,14 @@ def cmd_list_accounts(as_json: bool) -> int:
     return 0
 
 
-def cmd_dry_run(path: str, title_override: str | None, tags: list[str], as_json: bool) -> int:
+def cmd_dry_run(
+    path: str, title_override: str | None, tags: list[str], as_json: bool, skip_lint: bool
+) -> int:
     """note に接続せず、変換結果だけを表示する。"""
+    if not skip_lint and not as_json:
+        print(note_lint.format_report(note_lint.lint_file(path)))
+        print()
+
     result = note_markdown.convert_file(path)
     title = title_override or result.title
     all_tags = tags or result.tags
@@ -132,7 +156,11 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("投稿する Markdown ファイルを指定してください(または --list-accounts)")
 
     if args.dry_run:
-        return cmd_dry_run(args.markdown, args.title, args.tags, args.json)
+        return cmd_dry_run(args.markdown, args.title, args.tags, args.json, args.skip_lint)
+
+    # 投稿前に文体を検査する。ネットワークに触る前に落としたいので先に行う
+    if not args.skip_lint and run_lint(args.markdown, quiet=args.json):
+        return 1
 
     # --- ここから先は note に接続する ---
     account = resolve_account(args.account)

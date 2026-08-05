@@ -157,15 +157,18 @@ def _render_lists(items: list[_ListItem]) -> str:
 # フロントマター
 # --------------------------------------------------------------------------
 
-def _split_front_matter(text: str) -> tuple[dict[str, str], str]:
+def split_front_matter(text: str) -> tuple[dict[str, str], str, int]:
     """先頭のフロントマターを切り出す。
 
     1行目がちょうど `---` のときだけフロントマターとみなす。本文中の `---`
     (水平線)を誤ってフロントマターと解釈しないための制約。
+
+    戻り値は (メタ情報, 本文, 本文が始まる行の 0 始まり位置)。3つめは
+    note_lint が元ファイルの行番号を復元するために使う。
     """
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
-        return {}, text
+        return {}, text, 0
 
     for i in range(1, len(lines)):
         if lines[i].strip() in ("---", "..."):
@@ -175,9 +178,9 @@ def _split_front_matter(text: str) -> tuple[dict[str, str], str]:
                     continue
                 key, _, value = line.partition(":")
                 meta[key.strip().lower()] = value.strip()
-            return meta, "\n".join(lines[i + 1:])
+            return meta, "\n".join(lines[i + 1:]), i + 1
     # 閉じが無ければフロントマターではないと判断して素通しする
-    return {}, text
+    return {}, text, 0
 
 
 def _parse_tags(raw: str) -> list[str]:
@@ -205,7 +208,7 @@ def convert(
             その行を飛ばす(`--dry-run` 用)。
         base_dir: 画像の相対パスを解決する基準ディレクトリ。
     """
-    meta, body = _split_front_matter(markdown)
+    meta, body, _ = split_front_matter(markdown)
 
     title: str | None = meta.get("title") or None
     tags = _parse_tags(meta["tags"]) if meta.get("tags") else []

@@ -85,8 +85,48 @@ uv run scripts/note_post.py --list-accounts
 | `--eyecatch` | アイキャッチ画像のパス |
 | `--publish` | 公開まで行う(付けなければ下書き) |
 | `--dry-run` | note に接続せず変換結果だけ表示 |
+| `--skip-lint` | 投稿前の文体チェックを飛ばす |
 | `--json` | 結果を JSON で出力(他のスクリプトから使うとき) |
 | `--list-accounts` | 設定済みアカウントの一覧 |
+
+## 文体チェック(note_lint.py)
+
+投稿前に文体を機械的に検査する。`note_post.py` が自動で通すので普段は意識しなくてよいが、単体でも動く。
+
+```bash
+uv run scripts/note_lint.py docs/note/kiji.md
+uv run scripts/note_lint.py docs/note/*.md --strict
+```
+
+```
+docs/note/kiji.md
+  本文 2480 字 / 一人称 2 件(うち「私は」2 件)
+
+  docs/note/kiji.md:31: [warning] 「私は」: …私はこう考えて…
+```
+
+**このスクリプトの目的は、AI の自己申告を実測に置き換えること。** 「本文中0回です」と言わせるのではなく、実際に数えて行番号ごと出す。
+
+検査するもの: 一人称の出現 / 本文の文字数 / h4 以降の見出し / note が解釈しない記法(表・脚注・生 HTML)/ タイトルの有無と長さ / 一文の長さ / 文末の単調さ。
+
+`error` は投稿を止める。止まるのは「そのままでは投稿が成り立たないもの」だけで、現状はタイトルが決まらない場合のみ。文体上の指摘は `warning` で、投稿は止めない(見落としを拾う道具であって、書き手を縛る道具ではないため)。`--strict` を付けると warning も失敗扱いになる。
+
+### 意図して一人称を残す場合
+
+フロントマターで数を申告すると、その数に収まっている限り指摘されない。
+
+```markdown
+---
+title: 記事のタイトル
+allow_first_person: 2
+---
+```
+
+文体ルールそのものは `docs/note/STYLE.md` にある。
+
+## 記事を書かせる(/note-write)
+
+`/note-write` スキルを使うと、STYLE.md を読む → 執筆 → lint → 通るまで修正、を自走する。ルールを毎回説明し直す必要がない。定義は `.claude/skills/note-write/SKILL.md`。
 
 ## 記事の書き方
 
