@@ -52,6 +52,16 @@ class FrontMatterTest(unittest.TestCase):
         path = write(self.tmp / "b.md", "---\ntitle: T\ntags:\n  - AI\n  - '#習慣'\n---\n本文\n")
         self.assertEqual(note_post.load_article(path).tags, ["AI", "習慣"])
 
+    def test_tags_keep_reserved_words_as_text(self):
+        """「公開」「draft」等をタグに使っても真偽値へ化けないこと。"""
+        for line in ["tags: [公開, AI]", "tags:\n  - 公開\n  - AI"]:
+            path = write(self.tmp / "g.md", f"---\ntitle: T\n{line}\n---\n本文\n")
+            self.assertEqual(note_post.load_article(path).tags, ["公開", "AI"])
+
+    def test_title_with_colon_needs_no_quoting(self):
+        path = write(self.tmp / "h.md", "---\ntitle: 境界線: 入力してはいけない情報\n---\n本文\n")
+        self.assertEqual(note_post.load_article(path).title, "境界線: 入力してはいけない情報")
+
     def test_title_from_heading(self):
         path = write(self.tmp / "c.md", "# 見出しタイトル\n\n本文だよ\n")
         article = note_post.load_article(path)

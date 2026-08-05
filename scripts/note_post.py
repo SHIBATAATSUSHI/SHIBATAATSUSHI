@@ -241,8 +241,12 @@ _TRUE_VALUES = {"true", "yes", "on", "1", "公開", "public"}
 _FALSE_VALUES = {"false", "no", "off", "0", "下書き", "draft"}
 
 
-def _parse_scalar(value: str):
-    """front matter の値をゆるくパースする(YAMLの極小サブセット)。"""
+def _parse_scalar(value: str, coerce_bool: bool = True):
+    """front matter の値をゆるくパースする(YAMLの極小サブセット)。
+
+    リストの要素(タグなど)は文字列のまま扱う。`公開` や `draft` といった語を
+    タグに使ったときに真偽値へ化けるのを避けるため、coerce_bool=False で呼ぶ。
+    """
     value = value.strip()
     if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
         return value[1:-1]
@@ -250,12 +254,13 @@ def _parse_scalar(value: str):
         inner = value[1:-1].strip()
         if not inner:
             return []
-        return [_parse_scalar(item) for item in inner.split(",")]
-    lowered = value.lower()
-    if lowered in _TRUE_VALUES:
-        return True
-    if lowered in _FALSE_VALUES:
-        return False
+        return [_parse_scalar(item, coerce_bool=False) for item in inner.split(",")]
+    if coerce_bool:
+        lowered = value.lower()
+        if lowered in _TRUE_VALUES:
+            return True
+        if lowered in _FALSE_VALUES:
+            return False
     return value
 
 
@@ -278,7 +283,9 @@ def parse_front_matter(text: str) -> tuple[dict, str]:
             meta.setdefault(current_list_key, [])
             if not isinstance(meta[current_list_key], list):
                 meta[current_list_key] = []
-            meta[current_list_key].append(_parse_scalar(line.lstrip()[2:]))
+            meta[current_list_key].append(
+                _parse_scalar(line.lstrip()[2:], coerce_bool=False)
+            )
             continue
         if ":" not in line:
             continue
