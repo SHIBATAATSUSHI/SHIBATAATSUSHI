@@ -53,6 +53,12 @@ FIRST_PERSON_PRIMARY = re.compile(r"私は")
 # 「私は」の置換先として推奨する表現であり、これを咎めると矛盾するため。
 FIRST_PERSON_OTHER = re.compile(r"私(?!たち)[がのもにをと]|わたし(?!たち)|僕|俺")
 
+# Amazon の商品リンクと、アソシエイト参加者としての表示。
+# アソシエイトの専用リンクは URL に tag= が付く(通常リンクには付かない)。
+AMAZON_LINK = re.compile(r"https?://(?:www\.)?(?:amazon\.co\.jp|amzn\.(?:to|asia))/[^\s)]*")
+AMAZON_AFFILIATE_TAG = re.compile(r"[?&]tag=")
+AFFILIATE_DISCLOSURE = re.compile(r"アソシエイト")
+
 # note が解釈しない記法。書いてもそのまま文字として出てしまう。
 UNSUPPORTED = [
     (re.compile(r"^\s*\|.*\|\s*$"), "表は note で崩れる。箇条書きか画像に置き換える"),
@@ -327,6 +333,62 @@ def _check_unsupported(path: str, markdown: str) -> list[Finding]:
     return findings
 
 
+def _check_affiliate(path: str, markdown: str) -> list[Finding]:
+    """Amazon リンクとアソシエイト表示の整合を見る。
+
+    見たいのは2つの食い違い。どちらも規約と事実に関わるので機械で拾う。
+
+    1. 専用リンク(`tag=` 付き)を貼っているのに参加者表示が無い
+       → Amazon アソシエイト運営規約が求める表示の欠落。
+    2. 参加者表示があるのに専用リンクが無い
+       → まだ参加していない段階で「収入を得ています」と書くことになり、
+         事実に反する。通常リンクのまま公開する期間に起きやすい。
+    """
+    findings: list[Finding] = []
+    has_affiliate_link = False
+    disclosure_line: int | None = None
+    link_line: int | None = None
+
+    in_code = False
+    for i, raw in enumerate(markdown.splitlines(), start=1):
+        stripped = raw.strip()
+        if _FENCE_RE.match(stripped):
+            in_code = not in_code
+            continue
+        if in_code:
+            continue
+        for m in AMAZON_LINK.finditer(stripped):
+            if link_line is None:
+                link_line = i
+            if AMAZON_AFFILIATE_TAG.search(m.group(0)):
+                has_affiliate_link = True
+        if disclosure_line is None and AFFILIATE_DISCLOSURE.search(stripped):
+            disclosure_line = i
+
+    if has_affiliate_link and disclosure_line is None:
+        findings.append(
+            Finding(
+                path,
+                link_line or 1,
+                LEVEL_WARNING,
+                "no-disclosure",
+                "アソシエイトの専用リンクがあるのに参加者表示が無い(運営規約が表示を求めている)",
+            )
+        )
+    if disclosure_line is not None and not has_affiliate_link:
+        findings.append(
+            Finding(
+                path,
+                disclosure_line,
+                LEVEL_WARNING,
+                "false-disclosure",
+                "参加者表示があるのに専用リンク(tag= 付き)が無い。"
+                "まだ参加していないなら、収入を得ているという記述は事実に反する",
+            )
+        )
+    return findings
+
+
 def _check_sentences(path: str, prose: list[_ProseLine]) -> list[Finding]:
     """一文の長さと、文末の単調さを見る。"""
     findings: list[Finding] = []
@@ -400,6 +462,7 @@ def lint_text(
     report.findings.extend(_check_length(path, report.text_length, min_chars, max_chars))
     report.findings.extend(_check_headings(path, markdown))
     report.findings.extend(_check_unsupported(path, markdown))
+    report.findings.extend(_check_affiliate(path, markdown))
     report.findings.extend(_check_sentences(path, prose))
     report.findings.sort(key=lambda f: (f.line, f.code))
     return report

@@ -182,6 +182,49 @@ def test_toc記法は未対応扱いしない():
 
 
 # --------------------------------------------------------------------------
+# Amazon アソシエイト
+# --------------------------------------------------------------------------
+
+AMAZON_PLAIN = "[Amazonで見る](https://www.amazon.co.jp/dp/4087213129)"
+AMAZON_AFFILIATE = "[Amazonで見る](https://www.amazon.co.jp/dp/4087213129?tag=akutagawatora-22)"
+DISCLOSURE = "Amazonのアソシエイトとして、芥川寅之介は適格販売により収入を得ています。"
+
+
+def test_通常リンクだけなら指摘しない():
+    # アソシエイト参加前の、いまの正しい状態
+    r = lint(f"# 題\n\n本文。\n\n{AMAZON_PLAIN}")
+    assert "no-disclosure" not in codes(r)
+    assert "false-disclosure" not in codes(r)
+
+
+def test_専用リンクがあるのに参加者表示が無ければ指摘():
+    r = lint(f"# 題\n\n本文。\n\n{AMAZON_AFFILIATE}")
+    assert "no-disclosure" in codes(r)
+
+
+def test_専用リンクと参加者表示が揃っていれば指摘しない():
+    r = lint(f"# 題\n\n本文。\n\n{AMAZON_AFFILIATE}\n\n{DISCLOSURE}")
+    assert "no-disclosure" not in codes(r)
+    assert "false-disclosure" not in codes(r)
+
+
+def test_参加前に参加者表示だけ置くと指摘する():
+    # 「収入を得ています」は、まだ参加していない段階では事実に反する
+    r = lint(f"# 題\n\n本文。\n\n{AMAZON_PLAIN}\n\n{DISCLOSURE}")
+    assert "false-disclosure" in codes(r)
+
+
+def test_コードブロック内のリンクは対象外():
+    r = lint(f"# 題\n\n```\n{AMAZON_AFFILIATE}\n```\n\n本文。")
+    assert "no-disclosure" not in codes(r)
+
+
+def test_amzn_toの短縮リンクも見る():
+    r = lint("# 題\n\n本文。\n\n[本](https://amzn.to/abc123?tag=akutagawatora-22)")
+    assert "no-disclosure" in codes(r)
+
+
+# --------------------------------------------------------------------------
 # 文の検査
 # --------------------------------------------------------------------------
 
