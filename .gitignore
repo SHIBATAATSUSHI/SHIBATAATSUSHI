@@ -5,8 +5,9 @@ secrets/
 # 実アカウント設定(example のみコミットする)
 config/note_accounts.json
 
-# デバッグ用スクリーンショット
+# デバッグ用スクリーンショットと画面診断の結果
 screenshots/
+diagnostics/
 
 # Python
 __pycache__/

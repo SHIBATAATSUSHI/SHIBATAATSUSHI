@@ -108,6 +108,17 @@ SEL_PUBLISH_CONFIRM = [
     "button:has-text('有料エリア設定に進む') >> nth=-1",
 ]
 
+# doctor コマンドが「どの候補が実際に当たったか」を報告するための対応表
+SELECTOR_GROUPS = {
+    "SEL_TITLE": SEL_TITLE,
+    "SEL_BODY": SEL_BODY,
+    "SEL_SAVE_DRAFT": SEL_SAVE_DRAFT,
+    "SEL_GOTO_PUBLISH": SEL_GOTO_PUBLISH,
+    "SEL_HASHTAG_INPUT": SEL_HASHTAG_INPUT,
+    "SEL_PUBLISH_CONFIRM": SEL_PUBLISH_CONFIRM,
+    "SEL_UPDATE_PUBLISHED": SEL_UPDATE_PUBLISHED,
+}
+
 # ---------------------------------------------------------------------------
 # 設定・記事データ
 # ---------------------------------------------------------------------------
@@ -404,8 +415,11 @@ def _find(page, selectors: list[str], timeout_ms: int = 15000):
     raise NotePostError(
         "要素が見つかりませんでした。noteのUIが変わった可能性があります。\n"
         f"  試したセレクタ: {selectors}\n"
-        "  scripts/note_post.py 冒頭のセレクタ定義を更新してください。"
-        + (f"\n  最後のエラー: {last_error}" if last_error else "")
+        + (f"  最後のエラー: {last_error}\n" if last_error else "")
+        + "\n  いま画面にあるもの:\n"
+        + _format_elements(_collect_elements(page), limit=8)
+        + "\n\n  scripts/note_post.py 冒頭のセレクタ定義を、上の内容に合わせて更新してください。\n"
+        "  詳しい状況は次で採取できます: python scripts/note_post.py doctor"
     )
 
 
@@ -425,6 +439,88 @@ def _shot(page, shot_dir: Path | None, name: str) -> None:
 def _is_logged_out(page) -> bool:
     """ログイン画面に飛ばされていないかを判定する。"""
     return "/login" in page.url or "/signup" in page.url
+
+
+# ---------------------------------------------------------------------------
+# 画面の実物を調べる(セレクタがズレたときの復旧用)
+# ---------------------------------------------------------------------------
+
+# 画面上の操作可能な要素を集める。data-testid と class は、セレクタを直すときの手がかり。
+_COLLECT_ELEMENTS_JS = """
+() => {
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  };
+  const describe = (el) => ({
+    tag: el.tagName.toLowerCase(),
+    text: (el.innerText || el.value || '').trim().slice(0, 40),
+    testid: el.getAttribute('data-testid') || '',
+    placeholder: el.getAttribute('placeholder') || '',
+    cls: (el.getAttribute('class') || '').slice(0, 70),
+  });
+  const pick = (selector, limit) =>
+    [...document.querySelectorAll(selector)].filter(visible).slice(0, limit).map(describe);
+  return {
+    buttons: pick('button, [role="button"]', 40),
+    inputs: pick('input, textarea', 20),
+    editables: pick('[contenteditable="true"]', 10),
+  };
+}
+"""
+
+
+def _collect_elements(page) -> dict:
+    """画面上の操作可能な要素を集める。失敗しても空で返す。"""
+    try:
+        return page.evaluate(_COLLECT_ELEMENTS_JS) or {}
+    except Exception:
+        return {}
+
+
+def _format_elements(elements: dict, limit: int = 12) -> str:
+    """集めた要素を、そのまま貼れる形に整える。"""
+    if not elements:
+        return "  (画面の要素を取得できませんでした)"
+
+    lines: list[str] = []
+    labels = {"buttons": "ボタン", "inputs": "入力欄", "editables": "編集領域"}
+    for kind, label in labels.items():
+        items = elements.get(kind) or []
+        if not items:
+            continue
+        lines.append(f"  [{label}] {len(items)}件")
+        for item in items[:limit]:
+            parts = [f"<{item['tag']}>"]
+            if item.get("text"):
+                parts.append(f"「{item['text']}」")
+            if item.get("placeholder"):
+                parts.append(f"placeholder={item['placeholder']}")
+            if item.get("testid"):
+                parts.append(f"data-testid={item['testid']}")
+            if item.get("cls"):
+                parts.append(f"class={item['cls']}")
+            lines.append("    - " + " ".join(parts))
+        if len(items) > limit:
+            lines.append(f"    - ...他 {len(items) - limit} 件")
+    return "\n".join(lines) if lines else "  (操作できる要素が見つかりませんでした)"
+
+
+def _match_selector_groups(page) -> list[tuple[str, str | None]]:
+    """定義済みセレクタ候補のうち、実際に当たったものを調べる。"""
+    results: list[tuple[str, str | None]] = []
+    for name, selectors in SELECTOR_GROUPS.items():
+        hit = None
+        for selector in selectors:
+            try:
+                locator = page.locator(selector).first
+                if locator.count() > 0 and locator.is_visible():
+                    hit = selector
+                    break
+            except Exception:
+                continue
+        results.append((name, hit))
+    return results
 
 
 # ---------------------------------------------------------------------------
@@ -961,6 +1057,147 @@ def _has_any(page, selectors: list[str]) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# doctor コマンド
+# ---------------------------------------------------------------------------
+
+
+def _doctor_report(page, account: Account, target_url: str, verified: str | None) -> str:
+    """画面の実物とセレクタの当たり外れを Markdown にまとめる。"""
+    matches = _match_selector_groups(page)
+    missing = [name for name, hit in matches if hit is None]
+    elements = _collect_elements(page)
+
+    lines = [
+        "# note 画面診断",
+        "",
+        f"- 採取日時: {time.strftime('%Y-%m-%d %H:%M:%S')}",
+        f"- アカウント: {account.key} ({account.urlname})",
+        f"- 開いたURL: {target_url}",
+        f"- 実際のURL: {page.url}",
+        f"- ログイン照合: {verified or '判定不能'}",
+        "",
+        "## セレクタの当たり外れ",
+        "",
+        "| 定義 | 当たった候補 |",
+        "| --- | --- |",
+    ]
+    for name, hit in matches:
+        lines.append(f"| `{name}` | {'`' + hit + '`' if hit else '**なし**'} |")
+
+    lines += ["", "## 画面にある要素", ""]
+    labels = {"buttons": "ボタン", "inputs": "入力欄", "editables": "編集領域"}
+    for kind, label in labels.items():
+        items = elements.get(kind) or []
+        lines += [f"### {label}({len(items)}件)", ""]
+        if not items:
+            lines += ["(なし)", ""]
+            continue
+        lines += ["| tag | text | placeholder | data-testid | class |", "| --- | --- | --- | --- | --- |"]
+        for item in items:
+            cells = [
+                item.get("tag", ""),
+                item.get("text", "").replace("|", "/").replace("\n", " "),
+                item.get("placeholder", "").replace("|", "/"),
+                item.get("testid", ""),
+                item.get("cls", "").replace("|", "/"),
+            ]
+            lines.append("| " + " | ".join(cells) + " |")
+        lines.append("")
+
+    lines += ["## 次にやること", ""]
+    if missing:
+        lines += [
+            f"見つからなかった定義が {len(missing)} 件ある: "
+            + ", ".join(f"`{name}`" for name in missing),
+            "",
+            "上の表から該当しそうな要素を探し、`scripts/note_post.py` 冒頭の "
+            "セレクタ定義に候補を追加する。",
+        ]
+    else:
+        lines.append("すべての定義が当たっている。セレクタの修正は不要。")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def cmd_doctor(args, accounts: dict[str, Account], default_key: str | None) -> int:
+    """note の画面を開いて、セレクタが当たるかを調べて報告する。
+
+    初回セットアップやUI変更のあと、実際に投稿する前に状況を採取するためのコマンド。
+    書き込みは一切しない。
+    """
+    account = resolve_account(accounts, default_key, args.account)
+    _require_session(account)
+
+    target_url = NEW_NOTE_URL
+    if args.url:
+        target_url, target_urlname = note_edit_url(args.url)
+        if target_urlname and target_urlname != account.urlname:
+            raise NotePostError(
+                "指定された記事が、別アカウントのものです。\n"
+                f"  URL のアカウント : {target_urlname}\n"
+                f"  操作するアカウント: {account.urlname} ({account.key})"
+            )
+
+    out_dir = Path(args.out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+
+    sync_playwright = _import_playwright()
+    print(f"アカウント: {account.key}")
+    print(f"開くURL  : {target_url}")
+    print("書き込みは行いません。\n")
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=not args.headed, slow_mo=args.slow_mo)
+        try:
+            context = browser.new_context(storage_state=str(account.storage_state))
+            page = context.new_page()
+            page.set_default_timeout(30000)
+
+            print("ログイン中のアカウントを確認しています...")
+            # 診断なので、照合できなくても止めずに結果だけ記録する
+            verified = _verify_account(context, page, account, allow_unverified=True)
+
+            print("画面を開いています...")
+            page.goto(target_url, wait_until="domcontentloaded")
+            page.wait_for_timeout(5000)
+
+            if _is_logged_out(page):
+                raise NotePostError(
+                    "ログイン画面に飛ばされました。セッションが切れています。\n"
+                    f"  再ログイン: python scripts/note_post.py login "
+                    f"--account {account.key} --manual"
+                )
+
+            report = _doctor_report(page, account, target_url, verified)
+            shot_path = out_dir / f"doctor-{stamp}.png"
+            try:
+                page.screenshot(path=str(shot_path), full_page=True)
+            except Exception as exc:
+                print(f"[warn] スクリーンショットに失敗: {exc}", file=sys.stderr)
+                shot_path = None
+
+            if args.keep_open:
+                input("ブラウザを開いたままにしています。Enter で閉じます → ")
+        finally:
+            browser.close()
+
+    report_path = out_dir / f"doctor-{stamp}.md"
+    report_path.write_text(report, encoding="utf-8")
+
+    matches = [line for line in report.splitlines() if line.startswith("| `SEL_")]
+    print("\n--- セレクタの当たり外れ ---")
+    for line in matches:
+        print("  " + line.strip("| ").replace(" | ", " → "))
+
+    print(f"\n診断結果: {_rel(report_path)}")
+    if shot_path:
+        print(f"画面の写し: {_rel(shot_path)}")
+    print("\nセレクタに「なし」があれば、この2つをそのまま渡してもらえば修正できます。")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # accounts コマンド
 # ---------------------------------------------------------------------------
 
@@ -1107,6 +1344,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--url", help="上書き先の記事URLまたはキー(未指定なら front matter の note_url)"
     )
     p_update.set_defaults(func=cmd_update)
+
+    p_doctor = sub.add_parser(
+        "doctor", help="note の画面を開いてセレクタが当たるか調べる(書き込みなし)"
+    )
+    p_doctor.add_argument("--account", help="アカウントキー")
+    p_doctor.add_argument("--url", help="既存記事の編集画面を調べる場合のURL")
+    p_doctor.add_argument(
+        "--out", type=Path, default=REPO_ROOT / "diagnostics", help="診断結果の出力先"
+    )
+    p_doctor.add_argument("--headed", action="store_true", help="ブラウザを表示して実行する")
+    p_doctor.add_argument("--slow-mo", type=int, default=0, help="操作間の待ち(ms)")
+    p_doctor.add_argument("--keep-open", action="store_true", help="完了後もブラウザを閉じない")
+    p_doctor.set_defaults(func=cmd_doctor)
 
     p_accounts = sub.add_parser("accounts", help="設定済みアカウントを一覧表示する")
     p_accounts.add_argument(

@@ -164,6 +164,34 @@ python scripts/note_post.py accounts --verify   # 実際にセッションを開
 照合には note の内部API(`/api/v2/current_user`)を第一手段に使い、失敗したら DOM から拾う。
 非公式仕様のため壊れうるが、**読み取り専用の照合にしか使っていない**(投稿自体はブラウザ操作)。
 
+## 画面診断(初回はここから)
+
+セレクタが note の実物と合っているかを調べる。**書き込みは一切しない。**
+初回セットアップ時と、投稿が要素不足で失敗したときに使う。
+
+```bash
+python scripts/note_post.py doctor                  # 新規作成画面を調べる
+python scripts/note_post.py doctor --url https://note.com/19770104/n/nxxxxx  # 既存記事の編集画面
+python scripts/note_post.py doctor --headed         # ブラウザを見ながら
+```
+
+`diagnostics/` に2つ出力される。
+
+- `doctor-<日時>.md` — セレクタの当たり外れと、画面にある要素の一覧(tag / text / placeholder / data-testid / class)
+- `doctor-<日時>.png` — 画面全体の写し
+
+```
+--- セレクタの当たり外れ ---
+  `SEL_TITLE` → `textarea[placeholder*='記事タイトル']`
+  `SEL_BODY` → `div.ProseMirror[contenteditable='true']`
+  `SEL_SAVE_DRAFT` → **なし**
+```
+
+「なし」があれば、レポートの要素一覧から該当しそうなものを探し、
+`scripts/note_post.py` 冒頭のセレクタ定義に候補を足す。
+
+投稿中に要素が見つからなかった場合も、エラーメッセージにその時点の画面の要素が出る。
+
 ## デバッグ
 
 初回や UI 変更時は、ブラウザを表示して目視するのが早い。
@@ -185,11 +213,21 @@ python scripts/note_post.py post --file posts/example.md \
 | `--force` | 「重大」があっても続行する |
 | `--allow-unverified` | ログイン中アカウントを確認できなくても続行する |
 
+## テスト
+
+ブラウザを使わない部分(原稿の解釈、URLの検査、チェッカーの判定、アカウント照合、各ガード)を
+34件のテストで固めてある。Playwright は不要。
+
+```bash
+python -m unittest discover tests
+```
+
+セレクタ定義やチェックルールを直したときは、これを通してからコミットする。
+
 ## 既知の制約
 
 - **セレクタは実環境での検証が済んでいない。** note の UI は変わりやすく、現在のセレクタは
-  想定に基づく候補リスト。初回は必ず `--headed --screenshot-dir` を付けて下書きモードで走らせ、
-  ズレていたら `SEL_*` を実際の DOM に合わせて直すこと。
+  想定に基づく候補リスト。**初回は必ず `doctor` で当たり外れを確認してから**投稿すること。
 - 本文はキーボード入力で流し込むため、対応する書式は note のエディタが Markdown ショートカットとして
   解釈するもの(見出し・箇条書き・引用)に限られる。画像・埋め込み・有料エリアの設定は非対応。
 - 見出し画像(サムネイル)は設定しない。公開前に手動で付ける。
