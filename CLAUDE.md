@@ -7,7 +7,7 @@
 - `/scripts` — 単発Python
 - `/analysis` — 動作分析・HealthKit
 - `/experiments` — 試行
-- `/docs` — ドキュメント・文章コンテンツ
+- `/docs` — ドキュメント・文章コンテンツ。note の方針の正は `docs/note-strategy.md`(投稿予定は `note-content-calendar.md`、実績は `note-publication-log.md`)
 - `/posts` — note 投稿用のMarkdown原稿。note.com/19770104 専用(`docs/note-auto-post.md` 参照)
 - `/config` — 設定ファイル。実データは `.gitignore`、`*.example.json` のみコミットする
 

@@ -83,6 +83,12 @@ SEL_SAVE_DRAFT = [
     "button:has-text('下書き保存')",
     "button:has-text('保存')",
 ]
+# ログイン中アカウントをDOMから拾うときに、urlname ではないパスを除外するための一覧
+NON_URLNAME_PATHS = {
+    "notes", "settings", "search", "hashtag", "membership", "magazines",
+    "login", "signup", "logout", "help", "about", "sitemap", "contest",
+    "info", "premium", "store", "mypage", "following", "followers", "n",
+}
 SEL_UPDATE_PUBLISHED = [
     "button:has-text('更新する')",
     "button:has-text('公開設定を変更')",
@@ -335,15 +341,23 @@ def load_article(path: Path) -> Article:
     )
 
 
-def note_edit_url(url_or_key: str) -> str:
-    """note の記事URLまたはキーから、編集画面のURLを組み立てる。
+def note_edit_url(url_or_key: str) -> tuple[str, str | None]:
+    """note の記事URLまたはキーから、(編集画面のURL, アカウント名) を返す。
+
+    アカウント名は公開URL形式のときだけ取れる。取れない形式では None を返し、
+    アカウントの照合はログイン中アカウントの検証(_verify_account)に委ねる。
 
     受け付ける形:
-      https://note.com/19770104/n/nedb0aaf045b1   (公開URL)
-      https://note.com/notes/nedb0aaf045b1/edit   (編集URL)
-      nedb0aaf045b1                               (記事キー)
+      https://note.com/19770104/n/nedb0aaf045b1   (公開URL → urlname あり)
+      https://note.com/notes/nedb0aaf045b1/edit   (編集URL → urlname なし)
+      nedb0aaf045b1                               (記事キー → urlname なし)
     """
     value = url_or_key.strip().split("?")[0].rstrip("/")
+
+    public = re.search(r"note\.com/([0-9A-Za-z_-]+)/n/(n[0-9a-z]+)", value)
+    if public:
+        return f"{NOTE_BASE}/notes/{public.group(2)}/edit", public.group(1)
+
     match = re.search(r"/n(?:otes)?/(n[0-9a-z]+)", value)
     if match:
         key = match.group(1)
@@ -354,7 +368,7 @@ def note_edit_url(url_or_key: str) -> str:
             f"note の記事URL/キーとして解釈できません: {url_or_key}\n"
             "  例: https://note.com/19770104/n/nedb0aaf045b1 または nedb0aaf045b1"
         )
-    return f"{NOTE_BASE}/notes/{key}/edit"
+    return f"{NOTE_BASE}/notes/{key}/edit", None
 
 
 # ---------------------------------------------------------------------------
@@ -414,6 +428,95 @@ def _is_logged_out(page) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# アカウント同一性の検証
+#
+# 設定ファイルに書いたアカウントと、note 側で実際にログインしているアカウントは
+# 別物になりうる。取り違えたまま書き込むと他人の記事を壊すため、必ず照合する。
+# ---------------------------------------------------------------------------
+
+
+def _dig_urlname(payload):
+    """current_user のレスポンスから urlname を探す(形が変わっても拾えるように)。"""
+    if isinstance(payload, dict):
+        value = payload.get("urlname")
+        if isinstance(value, str) and value:
+            return value
+        for key in ("data", "user", "current_user"):
+            if key in payload:
+                found = _dig_urlname(payload[key])
+                if found:
+                    return found
+    return None
+
+
+def _current_urlname_from_api(context) -> str | None:
+    """note の current_user から、ログイン中アカウントの urlname を取得する。
+
+    ブラウザコンテキストの cookie を共有する APIRequestContext を使うため、
+    ページ遷移なしに読める。読み取り専用の照合にしか使わない。
+    """
+    try:
+        response = context.request.get(f"{NOTE_BASE}/api/v2/current_user", timeout=15000)
+        if not response.ok:
+            return None
+        return _dig_urlname(response.json())
+    except Exception:
+        return None
+
+
+def _current_urlname_from_dom(page) -> str | None:
+    """DOM からログイン中アカウントの urlname を拾う(APIが使えないときの代替)。"""
+    try:
+        page.goto(NOTE_BASE, wait_until="domcontentloaded")
+        page.wait_for_timeout(2000)
+        hrefs = page.eval_on_selector_all(
+            "header a[href], nav a[href]", "els => els.map(e => e.getAttribute('href'))"
+        )
+    except Exception:
+        return None
+
+    for href in hrefs or []:
+        match = re.fullmatch(r"/([0-9A-Za-z_-]+)", (href or "").split("?")[0].rstrip("/"))
+        if match and match.group(1) not in NON_URLNAME_PATHS:
+            return match.group(1)
+    return None
+
+
+def _verify_account(context, page, account: Account, allow_unverified: bool) -> str | None:
+    """ログイン中アカウントが設定と一致するかを確かめる。
+
+    一致すれば urlname を返す。不一致なら中断する。
+    判定できなかった場合も既定では中断する(警告だけでは取り違えを防げないため)。
+    """
+    actual = _current_urlname_from_api(context) or _current_urlname_from_dom(page)
+
+    if actual is None:
+        message = (
+            "ログイン中のアカウントを確認できませんでした。\n"
+            "  セッション切れか、note 側の仕様変更の可能性があります。\n"
+            f"  再ログイン: python scripts/note_post.py login --account {account.key} --manual\n"
+            "  確認済みのうえで進める場合は --allow-unverified を付けます。"
+        )
+        if not allow_unverified:
+            raise NotePostError(message)
+        print(f"\n[warn] {message}")
+        return None
+
+    if actual != account.urlname:
+        raise NotePostError(
+            "アカウントが一致しません。書き込みを中止しました。\n"
+            f"  設定 ({account.key}) : {account.urlname}\n"
+            f"  実際のログイン       : {actual}\n"
+            f"  {_rel(account.storage_state)} に別アカウントのセッションが入っています。\n"
+            f"  正しいアカウントでログインし直してください: "
+            f"python scripts/note_post.py login --account {account.key} --manual"
+        )
+
+    print(f"  ログイン中のアカウント: {actual} (設定と一致)")
+    return actual
+
+
+# ---------------------------------------------------------------------------
 # login コマンド
 # ---------------------------------------------------------------------------
 
@@ -455,6 +558,15 @@ def cmd_login(args, accounts: dict[str, Account], default_key: str | None) -> in
             raise NotePostError(
                 "ログインが完了していません。--manual を付けて手動でログインしてください。"
             )
+
+        # 別アカウントのセッションを保存してしまわないよう、保存前に照合する
+        print("ログインしたアカウントを確認しています...")
+        try:
+            _verify_account(context, page, account, args.allow_unverified)
+        except NotePostError:
+            _shot(page, args.screenshot_dir, f"{account.key}-account-mismatch")
+            browser.close()
+            raise
 
         account.storage_state.parent.mkdir(parents=True, exist_ok=True)
         context.storage_state(path=str(account.storage_state))
@@ -662,6 +774,19 @@ def _print_summary(article: Article, account: Account, publish: bool, mode: str)
     print(f"保存方法   : {'公開' if publish else '下書き保存'}")
 
 
+def _resolve_for_article(
+    args, article: Article, accounts: dict[str, Account], default_key: str | None
+) -> Account:
+    """原稿と CLI の両方でアカウント指定があるとき、どちらを採ったかを明示する。"""
+    if args.account and article.account and args.account != article.account:
+        print(
+            f"[注意] アカウント指定が食い違っています。"
+            f"--account={args.account} を採用します"
+            f"(原稿の front matter は {article.account})。"
+        )
+    return resolve_account(accounts, default_key, args.account or article.account)
+
+
 def _require_session(account: Account) -> None:
     if not account.storage_state.exists():
         raise NotePostError(
@@ -682,6 +807,8 @@ def _run_browser(account: Account, args, work) -> int:
         page = context.new_page()
         page.set_default_timeout(30000)
         try:
+            print("\nログイン中のアカウントを確認しています...")
+            _verify_account(context, page, account, args.allow_unverified)
             work(page, shot_dir)
             if args.keep_open:
                 input("ブラウザを開いたままにしています。Enter で閉じます → ")
@@ -696,7 +823,7 @@ def _run_browser(account: Account, args, work) -> int:
 def cmd_post(args, accounts: dict[str, Account], default_key: str | None) -> int:
     """新規記事を作成する。"""
     article = load_article(Path(args.file))
-    account = resolve_account(accounts, default_key, args.account or article.account)
+    account = _resolve_for_article(args, article, accounts, default_key)
 
     if article.note_url and not args.allow_duplicate:
         raise NotePostError(
@@ -740,7 +867,7 @@ def cmd_post(args, accounts: dict[str, Account], default_key: str | None) -> int
 def cmd_update(args, accounts: dict[str, Account], default_key: str | None) -> int:
     """既存記事を開いて本文を差し替える(下書き・公開済みの両方)。"""
     article = load_article(Path(args.file))
-    account = resolve_account(accounts, default_key, args.account or article.account)
+    account = _resolve_for_article(args, article, accounts, default_key)
 
     target = args.url or article.note_url
     if not target:
@@ -749,7 +876,14 @@ def cmd_update(args, accounts: dict[str, Account], default_key: str | None) -> i
             "  --url でURLを渡すか、原稿の front matter に note_url を書いてください。\n"
             "  例: note_url: https://note.com/19770104/n/nedb0aaf045b1"
         )
-    edit_url = note_edit_url(target)
+    edit_url, target_urlname = note_edit_url(target)
+    if target_urlname and target_urlname != account.urlname:
+        raise NotePostError(
+            "上書き先の記事が、別アカウントのものです。中止しました。\n"
+            f"  URL のアカウント : {target_urlname}\n"
+            f"  操作するアカウント: {account.urlname} ({account.key})\n"
+            f"  URL: {target}"
+        )
 
     publish = _resolve_publish(args, article, account)
     _print_summary(article, account, publish, "既存記事の上書き")
@@ -831,6 +965,26 @@ def _has_any(page, selectors: list[str]) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def _verify_saved_session(account: Account) -> str:
+    """保存済みセッションが設定どおりのアカウントかを調べ、結果の文字列を返す。"""
+    sync_playwright = _import_playwright()
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        try:
+            context = browser.new_context(storage_state=str(account.storage_state))
+            page = context.new_page()
+            page.set_default_timeout(30000)
+            actual = _current_urlname_from_api(context) or _current_urlname_from_dom(page)
+        finally:
+            browser.close()
+
+    if actual is None:
+        return "判定不能(セッション切れ、または note 側の仕様変更の可能性)"
+    if actual != account.urlname:
+        return f"不一致(note 側は {actual})。ログインし直してください"
+    return f"OK (note 側のログインも {actual})"
+
+
 def cmd_accounts(args, accounts: dict[str, Account], default_key: str | None) -> int:
     print(f"設定ファイル: {args.config}")
     for key in sorted(accounts):
@@ -841,6 +995,15 @@ def cmd_accounts(args, accounts: dict[str, Account], default_key: str | None) ->
         print(f"\n- {key}{mark}{label}")
         print(f"    プロフィール: {account.profile_url}")
         print(f"    セッション  : {account.storage_state} [{state}]")
+        if not args.verify:
+            continue
+        if not account.storage_state.exists():
+            print("    検証        : 未ログインのため確認できません")
+            continue
+        try:
+            print(f"    検証        : {_verify_saved_session(account)}")
+        except NotePostError as exc:
+            print(f"    検証        : 確認できませんでした ({exc})")
     return 0
 
 
@@ -872,6 +1035,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_login.add_argument("--headless", action="store_true", help="自動ログイン時にヘッドレス実行")
     p_login.add_argument("--screenshot-dir", type=Path, help="失敗時のスクリーンショット出力先")
+    p_login.add_argument(
+        "--allow-unverified",
+        action="store_true",
+        help="ログインしたアカウントを確認できなくてもセッションを保存する",
+    )
     p_login.set_defaults(func=cmd_login)
 
     def add_editor_args(sub_parser) -> None:
@@ -896,6 +1064,11 @@ def build_parser() -> argparse.ArgumentParser:
         )
         sub_parser.add_argument(
             "--force", action="store_true", help="重大な指摘があっても続行する"
+        )
+        sub_parser.add_argument(
+            "--allow-unverified",
+            action="store_true",
+            help="ログイン中アカウントを確認できなくても続行する",
         )
         sub_parser.add_argument(
             "--review-sheet-dir", type=Path, help="公開前確認票の出力先ディレクトリ"
@@ -936,6 +1109,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_update.set_defaults(func=cmd_update)
 
     p_accounts = sub.add_parser("accounts", help="設定済みアカウントを一覧表示する")
+    p_accounts.add_argument(
+        "--verify",
+        action="store_true",
+        help="保存済みセッションが設定どおりのアカウントかを実際に確認する",
+    )
     p_accounts.set_defaults(func=cmd_accounts)
 
     return parser
