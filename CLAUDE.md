@@ -8,7 +8,7 @@
 - `/analysis` — 動作分析・HealthKit
 - `/experiments` — 試行
 - `/docs` — ドキュメント・文章コンテンツ
-- `/posts` — note 投稿用のMarkdown原稿(`docs/note-auto-post.md` 参照)
+- `/posts` — note 投稿用のMarkdown原稿。note.com/19770104 専用(`docs/note-auto-post.md` 参照)
 - `/config` — 設定ファイル。実データは `.gitignore`、`*.example.json` のみコミットする
 
 ## コーディング規約

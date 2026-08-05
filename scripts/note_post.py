@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
-"""note.com への記事自動投稿スクリプト(複数アカウント対応)。
+"""note.com/19770104 への記事投稿スクリプト。
 
-note には公開された投稿APIが存在しないため、Playwright で実ブラウザを操作して投稿する。
-アカウントごとに Playwright の storage_state(ログイン済みcookie)をファイルで持ち、
-`--account` で切り替えることで複数アカウントを同じ仕組みで運用できる。
+note には公開された投稿APIが存在しないため、Playwright で実ブラウザを操作する。
+ログイン状態は storage_state(ログイン済みcookie)としてファイルに保存する。
 
-使い方の詳細は docs/note-auto-post.md を参照。
+このリポジトリは 19770104 専用。設定はアカウントキーで引く作りになっているが、
+公開前チェック(note_lint.py)は医療・リハビリのテーマ前提であり、
+他ジャンルのアカウントにそのまま使うと誤検出で止まる。
+運用方針は docs/note-strategy.md、使い方は docs/note-auto-post.md を参照。
 
-  # 1. アカウントごとに一度だけログインして storage_state を作る
-  python scripts/note_post.py login --account 19770104 --manual
+  # 1. 一度だけログインして storage_state を作る
+  python scripts/note_post.py login --manual
 
-  # 2. Markdown を下書きとして投稿する
-  python scripts/note_post.py post --account 19770104 --file posts/example.md
+  # 2. Markdown を下書きとして保存する
+  python scripts/note_post.py post --file posts/example.md
 
-  # 3. そのまま公開する
-  python scripts/note_post.py post --account 19770104 --file posts/example.md --publish
+  # 3. 既存記事を上書きする
+  python scripts/note_post.py update --file posts/example.md
 """
 
 from __future__ import annotations
@@ -850,7 +852,7 @@ def cmd_accounts(args, accounts: dict[str, Account], default_key: str | None) ->
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="note_post.py",
-        description="note.com に Markdown 記事を自動投稿する(複数アカウント対応)",
+        description="note.com/19770104 に Markdown 記事を下書き保存する",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(

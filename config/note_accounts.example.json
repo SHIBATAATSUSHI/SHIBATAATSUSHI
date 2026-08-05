@@ -1,22 +1,15 @@
 {
   "_comment": "cp config/note_accounts.example.json config/note_accounts.json して使う。パスワードはここに書かず環境変数名だけを書く。",
+  "_scope": "このリポジトリは note.com/19770104 専用。公開前チェック(scripts/note_lint.py)は医療・リハビリのテーマ前提で作られているため、他アカウントの原稿には適さない。",
   "default_account": "19770104",
   "accounts": {
     "19770104": {
-      "label": "柴田篤志 メインアカウント(理学療法士×AI×脳神経リハ)",
+      "label": "夏目漱右(大学病院の理学療法士。臨床判断・若手教育・組織運営・AI活用)",
       "urlname": "19770104",
       "storage_state": "secrets/note_19770104_state.json",
       "email_env": "NOTE_19770104_EMAIL",
       "password_env": "NOTE_19770104_PASSWORD",
       "_allow_publish": "医療テーマのため false 固定を推奨。下書き保存までを自動化し、公開は note 上で人が行う。",
-      "allow_publish": false
-    },
-    "akutagawa_tora": {
-      "label": "芥川寅(別コードで運用中。こちらから投げる場合のみ使用)",
-      "urlname": "akutagawa_tora",
-      "storage_state": "secrets/note_akutagawa_tora_state.json",
-      "email_env": "NOTE_AKUTAGAWA_TORA_EMAIL",
-      "password_env": "NOTE_AKUTAGAWA_TORA_PASSWORD",
       "allow_publish": false
     }
   }

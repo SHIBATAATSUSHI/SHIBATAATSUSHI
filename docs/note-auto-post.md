@@ -1,17 +1,16 @@
-# note 自動投稿(複数アカウント対応)
+# note 自動投稿(note.com/19770104 専用)
 
-Markdown 原稿を note.com に**下書き保存**するツール。既存記事の上書きにも対応する。
+Markdown 原稿を https://note.com/19770104 に**下書き保存**するツール。既存記事の上書きにも対応する。
 運用の前提(何のためにこれを作っているか)は [note-strategy.md](note-strategy.md) を参照。
 
 - `scripts/note_post.py` … note を操作する(login / post / update / accounts)
 - `scripts/note_lint.py` … 公開前チェック(医療・個人情報・出典・文体)
 
-対象アカウント:
-
-| キー | プロフィール | 備考 |
-| --- | --- | --- |
-| `19770104` | https://note.com/19770104 | このリポジトリでの主対象 |
-| `akutagawa_tora` | https://note.com/akutagawa_tora | 別コードで運用中。設定を足せばこちらからも投げられる |
+> **このリポジトリは 19770104 専用。**
+> 設定はアカウントキーで引く作りになっているが、公開前チェックのルールは
+> 医療・リハビリのテーマ前提で書かれている。創作・エッセイなど別ジャンルのアカウントに
+> 当てると、登場人物の年齢・性別の描写を患者情報と誤判定するなどして正しく動かない。
+> 他アカウントを扱う場合は、チェックルールをジャンル別に分ける改修が必要。
 
 ## 設計方針
 
@@ -130,11 +129,10 @@ python scripts/note_post.py update --file posts/example.md \
 公開済みの記事は下書きとして保存できないため、note 側で下書きに戻してから実行するか、
 内容を確認のうえ `--publish` を付けて更新する。
 
-### 別アカウントに投げる
+設定とログイン状態は次で確認できる。
 
 ```bash
-python scripts/note_post.py update --account akutagawa_tora --file posts/example.md
-python scripts/note_post.py accounts   # 設定とログイン状態の確認
+python scripts/note_post.py accounts
 ```
 
 ## デバッグ
