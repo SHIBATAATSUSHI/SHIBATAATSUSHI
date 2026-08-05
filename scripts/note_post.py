@@ -42,6 +42,8 @@ DEFAULT_CONFIG_PATH = REPO_ROOT / "config" / "note_accounts.json"
 EXAMPLE_CONFIG_PATH = REPO_ROOT / "config" / "note_accounts.example.json"
 
 NOTE_BASE = "https://note.com"
+# 記事の編集画面は editor.note.com 側にある(末尾スラッシュまで含めて必要)
+EDITOR_BASE = "https://editor.note.com"
 LOGIN_URL = f"{NOTE_BASE}/login"
 NEW_NOTE_URL = f"{NOTE_BASE}/notes/new"
 
@@ -67,21 +69,48 @@ SEL_LOGIN_SUBMIT = [
     "button:has-text('ログイン')",
     "button[type='submit']",
 ]
+# 先頭の候補は、実際の編集画面で確認が取れているもの
 SEL_TITLE = [
+    "textarea[placeholder='記事タイトル']",
     "textarea[placeholder*='記事タイトル']",
     "textarea[placeholder*='タイトル']",
     "[data-testid='post-title'] textarea",
-    "[data-testid='post-title']",
     "h1[contenteditable='true']",
 ]
 SEL_BODY = [
+    "div[contenteditable='true'][role='textbox']",
     "div.ProseMirror[contenteditable='true']",
     "[data-testid='post-body'] [contenteditable='true']",
     "div[contenteditable='true']",
 ]
+# 記事によって「一時保存」と「下書き保存」の両方がありうる。
+# ボタンとして role が取れない場合があるため、テキスト一致も候補に入れる。
 SEL_SAVE_DRAFT = [
     "button:has-text('下書き保存')",
+    "button:has-text('一時保存')",
+    "text='下書き保存'",
+    "text='一時保存'",
     "button:has-text('保存')",
+]
+# 保存できたことを示す表示
+SEL_SAVED_NOTICE = [
+    "text=下書きを保存しました",
+    "text=保存済み",
+    "text=保存しました",
+]
+# 「複数画面で編集されています。どちらを保存しますか?」の競合ダイアログ。
+# 初期選択は「別の画面」= 古い原稿。放置すると今回の変更が捨てられる。
+SEL_CONFLICT_DIALOG = [
+    "text=複数画面で編集",
+    "[role='dialog']:has-text('どちらを保存')",
+]
+SEL_CONFLICT_CURRENT = [
+    "[role='checkbox']:has-text('現在の画面')",
+    "label:has-text('現在の画面')",
+    "text=現在の画面",
+]
+SEL_CONFLICT_SAVE = [
+    "button:has-text('保存する')",
 ]
 # ログイン中アカウントをDOMから拾うときに、urlname ではないパスを除外するための一覧
 NON_URLNAME_PATHS = {
@@ -117,6 +146,11 @@ SELECTOR_GROUPS = {
     "SEL_HASHTAG_INPUT": SEL_HASHTAG_INPUT,
     "SEL_PUBLISH_CONFIRM": SEL_PUBLISH_CONFIRM,
     "SEL_UPDATE_PUBLISHED": SEL_UPDATE_PUBLISHED,
+}
+# 保存後にしか出ないため、doctor では「なし」で正常
+SELECTOR_GROUPS_TRANSIENT = {
+    "SEL_SAVED_NOTICE": SEL_SAVED_NOTICE,
+    "SEL_CONFLICT_DIALOG": SEL_CONFLICT_DIALOG,
 }
 
 # ---------------------------------------------------------------------------
@@ -359,6 +393,82 @@ def load_article(path: Path) -> Article:
     )
 
 
+# ---------------------------------------------------------------------------
+# Markdown → note の本文HTML
+#
+# note のエディタ(ProseMirror)には HTML をクリップボード経由で貼り付ける。
+# 1文字ずつ打ち込んで Markdown ショートカットの自動変換に期待する方式は、
+# 変換されるとは限らず、遅い。HTML で渡せば見出し・リスト・リンクが確実に残る。
+# ---------------------------------------------------------------------------
+
+
+def _inline_md(text: str) -> str:
+    """行内の記法を HTML にする。エスケープしてからリンクを組み立てる。"""
+    escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return re.sub(
+        r"\[([^\]]+)\]\((https?://[^)]+)\)", r'<a href="\2">\1</a>', escaped
+    )
+
+
+def markdown_to_note_html(markdown: str) -> str:
+    """本文の Markdown を、note へ貼り付けるための HTML に変換する。
+
+    対応するのは見出し(## / ###)、引用、箇条書き、番号付きリスト、段落、リンク。
+    画像・表・コードブロックには対応しない。
+    """
+    output: list[str] = []
+    current_list: str | None = None
+
+    def close_list() -> None:
+        nonlocal current_list
+        if current_list:
+            output.append(f"</{current_list}>")
+            current_list = None
+
+    def open_list(kind: str) -> None:
+        nonlocal current_list
+        if current_list != kind:
+            close_list()
+            current_list = kind
+            output.append(f"<{kind}>")
+
+    for line in markdown.split("\n"):
+        if not line.strip():
+            close_list()
+            continue
+
+        heading = re.match(r"^(#{2,3})\s+(.+)", line)
+        if heading:
+            close_list()
+            level = len(heading.group(1))
+            output.append(f"<h{level}>{_inline_md(heading[2])}</h{level}>")
+            continue
+
+        quote = re.match(r"^>\s?(.*)", line)
+        if quote:
+            close_list()
+            output.append(f"<blockquote><p>{_inline_md(quote[1])}</p></blockquote>")
+            continue
+
+        unordered = re.match(r"^\s*[-*+]\s+(.+)", line)
+        if unordered:
+            open_list("ul")
+            output.append(f"<li><p>{_inline_md(unordered[1])}</p></li>")
+            continue
+
+        ordered = re.match(r"^\s*\d+\.\s+(.+)", line)
+        if ordered:
+            open_list("ol")
+            output.append(f"<li><p>{_inline_md(ordered[1])}</p></li>")
+            continue
+
+        close_list()
+        output.append(f"<p>{_inline_md(line)}</p>")
+
+    close_list()
+    return "".join(output)
+
+
 def note_edit_url(url_or_key: str) -> tuple[str, str | None]:
     """note の記事URLまたはキーから、(編集画面のURL, アカウント名) を返す。
 
@@ -366,15 +476,15 @@ def note_edit_url(url_or_key: str) -> tuple[str, str | None]:
     アカウントの照合はログイン中アカウントの検証(_verify_account)に委ねる。
 
     受け付ける形:
-      https://note.com/19770104/n/nedb0aaf045b1   (公開URL → urlname あり)
-      https://note.com/notes/nedb0aaf045b1/edit   (編集URL → urlname なし)
-      nedb0aaf045b1                               (記事キー → urlname なし)
+      https://note.com/19770104/n/nedb0aaf045b1        (公開URL → urlname あり)
+      https://editor.note.com/notes/nedb0aaf045b1/edit/ (編集URL → urlname なし)
+      nedb0aaf045b1                                    (記事キー → urlname なし)
     """
     value = url_or_key.strip().split("?")[0].rstrip("/")
 
     public = re.search(r"note\.com/([0-9A-Za-z_-]+)/n/(n[0-9a-z]+)", value)
-    if public:
-        return f"{NOTE_BASE}/notes/{public.group(2)}/edit", public.group(1)
+    if public and public.group(1) != "notes":
+        return f"{EDITOR_BASE}/notes/{public.group(2)}/edit/", public.group(1)
 
     match = re.search(r"/n(?:otes)?/(n[0-9a-z]+)", value)
     if match:
@@ -386,7 +496,7 @@ def note_edit_url(url_or_key: str) -> tuple[str, str | None]:
             f"note の記事URL/キーとして解釈できません: {url_or_key}\n"
             "  例: https://note.com/19770104/n/nedb0aaf045b1 または nedb0aaf045b1"
         )
-    return f"{NOTE_BASE}/notes/{key}/edit", None
+    return f"{EDITOR_BASE}/notes/{key}/edit/", None
 
 
 # ---------------------------------------------------------------------------
@@ -407,15 +517,28 @@ def _import_playwright():
 
 
 def _find(page, selectors: list[str], timeout_ms: int = 15000):
-    """セレクタ候補を順に試し、最初に表示されたものを返す。"""
+    """セレクタ候補を順に試し、最初に表示されたものを返す。
+
+    候補が複数の要素に当たった場合は警告する。黙って先頭を掴むと、
+    意図しない要素へ書き込む事故につながるため。
+    """
     deadline = time.monotonic() + timeout_ms / 1000
     last_error: Exception | None = None
     while time.monotonic() < deadline:
         for selector in selectors:
             try:
+                count = page.locator(selector).count()
+                if count == 0:
+                    continue
                 locator = page.locator(selector).first
-                if locator.count() > 0 and locator.is_visible():
-                    return locator
+                if not locator.is_visible():
+                    continue
+                if count > 1:
+                    print(
+                        f"  [warn] {selector} が {count} 件に一致しました。"
+                        "先頭を使いますが、対象が正しいか確認してください。"
+                    )
+                return locator
             except Exception as exc:  # ページ遷移中の一時的な失敗は握りつぶす
                 last_error = exc
         page.wait_for_timeout(300)
@@ -513,10 +636,10 @@ def _format_elements(elements: dict, limit: int = 12) -> str:
     return "\n".join(lines) if lines else "  (操作できる要素が見つかりませんでした)"
 
 
-def _match_selector_groups(page) -> list[tuple[str, str | None]]:
+def _match_selector_groups(page, groups: dict | None = None) -> list[tuple[str, str | None]]:
     """定義済みセレクタ候補のうち、実際に当たったものを調べる。"""
     results: list[tuple[str, str | None]] = []
-    for name, selectors in SELECTOR_GROUPS.items():
+    for name, selectors in (groups or SELECTOR_GROUPS).items():
         hit = None
         for selector in selectors:
             try:
@@ -690,27 +813,73 @@ def cmd_login(args, accounts: dict[str, Account], default_key: str | None) -> in
 # ---------------------------------------------------------------------------
 
 
-def _type_body(page, body_locator, body: str, delay_ms: int, use_markdown: bool) -> None:
-    """本文を1行ずつ入力する。
+# クリップボードに HTML とプレーンテキストの両方を載せる
+_CLIPBOARD_WRITE_JS = """
+async ([html, plain]) => {
+  await navigator.clipboard.write([
+    new ClipboardItem({
+      'text/html': new Blob([html], { type: 'text/html' }),
+      'text/plain': new Blob([plain], { type: 'text/plain' }),
+    }),
+  ]);
+  return true;
+}
+"""
 
-    note のエディタは `## ` や `- ` などの Markdown ショートカットに反応するため、
-    素の Markdown をそのまま打ち込むと見出し・リストに変換される。
-    変換させたくない場合は --no-markdown-shortcut を使う(記号を除去して入力)。
+# クリップボードが使えない環境向け。paste イベントを直接起こす。
+# ProseMirror は paste を拾うため、innerHTML の直接代入より安全。
+_DISPATCH_PASTE_JS = """
+([selector, html, plain]) => {
+  const target = document.querySelector(selector);
+  if (!target) return false;
+  const data = new DataTransfer();
+  data.setData('text/html', html);
+  data.setData('text/plain', plain);
+  target.focus();
+  const event = new ClipboardEvent('paste', {
+    clipboardData: data, bubbles: true, cancelable: true,
+  });
+  return target.dispatchEvent(event);
+}
+"""
+
+
+def _paste_body(page, body_locator, html: str, plain: str, mode: str) -> str:
+    """本文欄の中身を、HTML を貼り付けて置き換える。
+
+    1文字ずつ打ち込む方式はやめた。note のエディタが Markdown 記法を
+    自動変換するとは限らず、見出しやリストが崩れるため。
+    戻り値は実際に使った方式。
     """
     body_locator.click()
-    lines = body.split("\n")
-    for index, line in enumerate(lines):
-        text = line
-        if not use_markdown:
-            text = re.sub(r"^\s{0,3}(#{1,6}\s+|[-*+]\s+|>\s+)", "", text)
-        if index > 0:
-            page.keyboard.press("Enter")
-            # 直前がリスト項目で今回が空行なら、もう一度 Enter でリストを抜ける
-            prev = lines[index - 1].lstrip()
-            if not text.strip() and re.match(r"^([-*+]\s+|\d+\.\s+|>\s+)", prev):
-                page.keyboard.press("Enter")
-        if text:
-            page.keyboard.type(text, delay=delay_ms)
+    page.wait_for_timeout(300)
+
+    if mode in ("auto", "clipboard"):
+        try:
+            page.evaluate(_CLIPBOARD_WRITE_JS, [html, plain])
+            body_locator.press("ControlOrMeta+A")
+            body_locator.press("ControlOrMeta+V")
+            page.wait_for_timeout(1500)
+            return "clipboard"
+        except Exception as exc:
+            if mode == "clipboard":
+                raise NotePostError(f"クリップボードへの書き込みに失敗しました: {exc}") from exc
+            print(f"  [warn] クリップボードが使えないため paste イベントに切り替えます: {exc}")
+
+    # 全選択してから paste イベントを起こし、選択範囲を置き換える
+    body_locator.press("ControlOrMeta+A")
+    selector = SEL_BODY[0]
+    for candidate in SEL_BODY:
+        if page.locator(candidate).count() > 0:
+            selector = candidate
+            break
+    if not page.evaluate(_DISPATCH_PASTE_JS, [selector, html, plain]):
+        raise NotePostError(
+            "本文の貼り付けに失敗しました。\n"
+            "  --paste-mode clipboard を試すか、--headed で画面を確認してください。"
+        )
+    page.wait_for_timeout(1500)
+    return "paste-event"
 
 
 def _add_tags(page, tags: list[str], shot_dir: Path | None) -> None:
@@ -729,14 +898,6 @@ def _add_tags(page, tags: list[str], shot_dir: Path | None) -> None:
         page.keyboard.press("Enter")
         page.wait_for_timeout(400)
     print(f"  タグを追加: {', '.join(tags)}")
-
-
-def _clear_field(page, locator) -> None:
-    """入力欄・エディタの中身を全選択して消す(上書き用)。"""
-    locator.click()
-    page.keyboard.press("Control+a")
-    page.keyboard.press("Delete")
-    page.wait_for_timeout(300)
 
 
 def _run_lint(article: Article, args) -> list:
@@ -815,42 +976,157 @@ def _open_editor(page, account: Account, target_url: str, shot_dir: Path | None)
         )
 
 
-def _write_article(page, article: Article, args, overwrite: bool) -> None:
-    """タイトルと本文をエディタに流し込む。overwrite なら既存の中身を消してから。"""
+def _write_article(page, article: Article, args) -> None:
+    """タイトルと本文をエディタに流し込む。既存の内容は置き換わる。"""
     print("タイトルを入力しています...")
-    title_locator = _find(page, SEL_TITLE)
-    if overwrite:
-        _clear_field(page, title_locator)
-    else:
-        title_locator.click()
-    page.keyboard.type(article.title, delay=args.typing_delay)
+    _find(page, SEL_TITLE).fill(article.title)
     page.wait_for_timeout(500)
 
-    print("本文を入力しています...")
+    print("本文を貼り付けています...")
     body_locator = _find(page, SEL_BODY)
-    if overwrite:
-        _clear_field(page, body_locator)
-    _type_body(
-        page,
-        body_locator,
-        article.body,
-        args.typing_delay,
-        not args.no_markdown_shortcut,
+    html = markdown_to_note_html(article.body)
+    method = _paste_body(page, body_locator, html, article.body, args.paste_mode)
+    print(f"  貼り付け方式: {method}")
+
+
+# 書き込み結果を読み戻す。目視の前に、崩れていないかを機械的に確かめる。
+_INSPECT_JS = """
+([titleSelector, bodySelector]) => {
+  const title = document.querySelector(titleSelector);
+  const body = document.querySelector(bodySelector);
+  if (!body) return null;
+  const text = body.innerText || '';
+  return {
+    title: title ? (title.value ?? title.innerText) : null,
+    chars: text.length,
+    h2: body.querySelectorAll('h2').length,
+    h3: body.querySelectorAll('h3').length,
+    li: body.querySelectorAll('li').length,
+    links: body.querySelectorAll('a').length,
+    watashi: (text.match(/私は/g) || []).length,
+    head: text.slice(0, 80),
+    tail: text.slice(-80),
+  };
+}
+"""
+
+
+def _inspect_written(page, article: Article) -> dict | None:
+    """貼り付け後の内容を読み戻して要約を返す。"""
+    title_selector = next(
+        (s for s in SEL_TITLE if page.locator(s).count() > 0), SEL_TITLE[0]
     )
-    page.wait_for_timeout(2000)
+    body_selector = next(
+        (s for s in SEL_BODY if page.locator(s).count() > 0), SEL_BODY[0]
+    )
+    try:
+        return page.evaluate(_INSPECT_JS, [title_selector, body_selector])
+    except Exception as exc:
+        print(f"  [warn] 書き込み結果を読み戻せませんでした: {exc}")
+        return None
+
+
+def _report_written(page, article: Article) -> None:
+    """読み戻した内容を表示し、明らかにおかしい場合は警告する。"""
+    result = _inspect_written(page, article)
+    if not result:
+        return
+
+    expected_html = markdown_to_note_html(article.body)
+    print("\n--- 書き込み結果 ---")
+    print(f"  タイトル : {result.get('title')}")
+    print(
+        f"  本文     : {result.get('chars')}文字 / "
+        f"h2 {result.get('h2')} / h3 {result.get('h3')} / "
+        f"li {result.get('li')} / リンク {result.get('links')}"
+    )
+    print(f"  「私は」 : {result.get('watashi')}箇所")
+    print(f"  冒頭     : {result.get('head')}")
+    print(f"  末尾     : {result.get('tail')}")
+
+    if result.get("title") != article.title:
+        print("  [warn] タイトルが原稿と一致しません。")
+    if not result.get("chars"):
+        print("  [warn] 本文が空です。貼り付けに失敗しています。")
+    for tag in ("h2", "h3", "li", "a"):
+        key = "links" if tag == "a" else tag
+        expected = expected_html.count(f"<{tag}>" if tag != "a" else "<a ")
+        actual = result.get(key) or 0
+        if expected and actual < expected:
+            print(f"  [warn] {tag} が {expected} 個のはずが {actual} 個です。")
+
+
+def _handle_save_conflict(page, shot_dir: Path | None) -> bool:
+    """「複数画面で編集されています」の競合ダイアログを処理する。
+
+    初期選択は「別の画面」= 保存前の古い原稿。放置すると今回の変更が捨てられるため、
+    「現在の画面」を選び直してから保存する。処理したら True を返す。
+    """
+    if not _has_any(page, SEL_CONFLICT_DIALOG):
+        return False
+
+    print("  競合ダイアログが出ました。「現在の画面」を選び直します...")
+    _shot(page, shot_dir, "save-conflict")
+
+    # ラベルに日時と文字数が入るため、完全一致では拾えない
+    current = None
+    for selector in SEL_CONFLICT_CURRENT:
+        locator = page.locator(selector).first
+        try:
+            if locator.count() > 0 and locator.is_visible():
+                current = locator
+                break
+        except Exception:
+            continue
+    if current is None:
+        raise NotePostError(
+            "競合ダイアログの「現在の画面」を選べませんでした。中止します。\n"
+            "  このまま保存すると、今回の変更ではなく古い原稿が残ります。\n"
+            "  --headed で画面を開き、手動で「現在の画面」を選んで保存してください。\n\n"
+            "  いま画面にあるもの:\n" + _format_elements(_collect_elements(page), limit=10)
+        )
+
+    try:
+        current.check()
+    except Exception:
+        current.click()
+    page.wait_for_timeout(500)
+
+    _find(page, SEL_CONFLICT_SAVE, timeout_ms=8000).click()
+    page.wait_for_timeout(3000)
+
+    if _has_any(page, SEL_CONFLICT_DIALOG):
+        raise NotePostError("競合ダイアログが閉じませんでした。手動で確認してください。")
+    return True
 
 
 def _save_draft(page, account: Account, shot_dir: Path | None) -> None:
-    """下書きとして保存する。"""
+    """下書きとして保存し、保存できたことを確認する。"""
     print("下書きとして保存しています...")
     try:
-        _find(page, SEL_SAVE_DRAFT, timeout_ms=8000).click()
+        _find(page, SEL_SAVE_DRAFT, timeout_ms=10000).click()
+    except NotePostError as exc:
+        # note は自動保存も走るため、ボタンが無いこと自体は致命傷ではない
+        print(f"  [warn] 保存ボタンが見つかりません。自動保存に任せます。\n{exc}")
         page.wait_for_timeout(3000)
-    except NotePostError:
-        # note は自動保存されるため、保存ボタンが無くても致命傷ではない
-        print("  [warn] 下書き保存ボタンが見つかりません。自動保存に任せます。")
+        _shot(page, shot_dir, f"{account.key}-draft-saved")
+        return
+
+    page.wait_for_timeout(2000)
+    _handle_save_conflict(page, shot_dir)
+
+    if _has_any(page, SEL_SAVED_NOTICE):
+        print("  保存を確認しました。")
+    else:
         page.wait_for_timeout(3000)
+        if _has_any(page, SEL_SAVED_NOTICE):
+            print("  保存を確認しました。")
+        else:
+            print("  [warn] 保存された表示を確認できませんでした。画面を目視してください。")
     _shot(page, shot_dir, f"{account.key}-draft-saved")
+
+
+
 
 
 def _publish(page, account: Account, article: Article, shot_dir: Path | None) -> None:
@@ -907,6 +1183,13 @@ def _run_browser(account: Account, args, work) -> int:
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=not args.headed, slow_mo=args.slow_mo)
         context = browser.new_context(storage_state=str(account.storage_state))
+        # 本文は HTML をクリップボード経由で貼り付けるため権限が要る
+        try:
+            context.grant_permissions(
+                ["clipboard-read", "clipboard-write"], origin=EDITOR_BASE
+            )
+        except Exception as exc:
+            print(f"[warn] クリップボード権限を付与できませんでした: {exc}")
         page = context.new_page()
         page.set_default_timeout(30000)
         try:
@@ -952,7 +1235,8 @@ def cmd_post(args, accounts: dict[str, Account], default_key: str | None) -> int
     def work(page, shot_dir):
         print("\nエディタを開いています...")
         _open_editor(page, account, NEW_NOTE_URL, shot_dir)
-        _write_article(page, article, args, overwrite=False)
+        _write_article(page, article, args)
+        _report_written(page, article)
         _shot(page, shot_dir, f"{account.key}-editor")
         editor_url = page.url
         if publish:
@@ -1018,7 +1302,8 @@ def cmd_update(args, accounts: dict[str, Account], default_key: str | None) -> i
                 "  内容を確認のうえ --publish を付けて更新してください。"
             )
 
-        _write_article(page, article, args, overwrite=True)
+        _write_article(page, article, args)
+        _report_written(page, article)
         _shot(page, shot_dir, f"{account.key}-after-update")
 
         if already_public:
@@ -1322,12 +1607,11 @@ def build_parser() -> argparse.ArgumentParser:
             "--slow-mo", type=int, default=0, help="操作間の待ち(ms)。デバッグ用"
         )
         sub_parser.add_argument(
-            "--typing-delay", type=int, default=8, help="1文字あたりの入力遅延(ms)"
-        )
-        sub_parser.add_argument(
-            "--no-markdown-shortcut",
-            action="store_true",
-            help="`#` や `-` を除去して素のテキストとして入力する",
+            "--paste-mode",
+            choices=["auto", "clipboard", "event"],
+            default="auto",
+            help="本文の貼り付け方式。auto はクリップボードを試し、"
+            "だめなら paste イベントに切り替える",
         )
         sub_parser.add_argument(
             "--screenshot-dir", type=Path, help="各段階のスクリーンショット出力先"

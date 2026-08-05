@@ -91,8 +91,9 @@ class EditUrlTest(unittest.TestCase):
     """記事URLの解釈とアカウント名の抽出。"""
 
     def test_public_url_yields_urlname(self):
+        """編集画面は editor.note.com 側で、末尾スラッシュまで必要。"""
         url, name = note_post.note_edit_url("https://note.com/19770104/n/n52aef685b03f")
-        self.assertEqual(url, "https://note.com/notes/n52aef685b03f/edit")
+        self.assertEqual(url, "https://editor.note.com/notes/n52aef685b03f/edit/")
         self.assertEqual(name, "19770104")
 
     def test_other_account_url_is_detected(self):
@@ -102,14 +103,77 @@ class EditUrlTest(unittest.TestCase):
         self.assertEqual(name, "akutagawa_tora")
 
     def test_edit_url_and_bare_key_have_no_urlname(self):
-        for value in ["https://note.com/notes/nedb0aaf045b1/edit", "nedb0aaf045b1"]:
+        for value in [
+            "https://editor.note.com/notes/nedb0aaf045b1/edit/",
+            "https://note.com/notes/nedb0aaf045b1/edit",
+            "nedb0aaf045b1",
+        ]:
             url, name = note_post.note_edit_url(value)
-            self.assertEqual(url, "https://note.com/notes/nedb0aaf045b1/edit")
+            self.assertEqual(url, "https://editor.note.com/notes/nedb0aaf045b1/edit/")
             self.assertIsNone(name)
 
     def test_garbage_is_rejected(self):
         with self.assertRaises(note_post.NotePostError):
             note_post.note_edit_url("https://example.com/foo")
+
+
+class MarkdownToHtmlTest(unittest.TestCase):
+    """本文の HTML 変換。note へはこの HTML を貼り付ける。"""
+
+    def convert(self, markdown):
+        return note_post.markdown_to_note_html(markdown)
+
+    def test_headings(self):
+        self.assertEqual(self.convert("## 大見出し"), "<h2>大見出し</h2>")
+        self.assertEqual(self.convert("### 小見出し"), "<h3>小見出し</h3>")
+
+    def test_paragraph(self):
+        self.assertEqual(self.convert("本文です。"), "<p>本文です。</p>")
+
+    def test_unordered_list_is_wrapped_once(self):
+        html = self.convert("- 一つ目\n- 二つ目")
+        self.assertEqual(html, "<ul><li><p>一つ目</p></li><li><p>二つ目</p></li></ul>")
+
+    def test_ordered_list(self):
+        html = self.convert("1. 最初\n2. 次")
+        self.assertEqual(html, "<ol><li><p>最初</p></li><li><p>次</p></li></ol>")
+
+    def test_blank_line_closes_list(self):
+        html = self.convert("- 項目\n\n段落")
+        self.assertEqual(html, "<ul><li><p>項目</p></li></ul><p>段落</p>")
+
+    def test_list_type_switch_closes_previous(self):
+        html = self.convert("- 箇条\n1. 番号")
+        self.assertEqual(
+            html, "<ul><li><p>箇条</p></li></ul><ol><li><p>番号</p></li></ol>"
+        )
+
+    def test_blockquote(self):
+        self.assertEqual(self.convert("> 引用"), "<blockquote><p>引用</p></blockquote>")
+
+    def test_link(self):
+        self.assertEqual(
+            self.convert("参考 [出典](https://example.org/a)"),
+            '<p>参考 <a href="https://example.org/a">出典</a></p>',
+        )
+
+    def test_html_is_escaped(self):
+        html = self.convert("<script>alert(1)</script> と A & B")
+        self.assertNotIn("<script>", html)
+        self.assertIn("&lt;script&gt;", html)
+        self.assertIn("&amp;", html)
+
+    def test_unclosed_list_is_closed_at_end(self):
+        self.assertTrue(self.convert("- 最後の項目").endswith("</ul>"))
+
+    def test_structure_counts_match_source(self):
+        """見出し・リスト・リンクの数が原稿と一致すること。"""
+        markdown = "## A\n\n本文\n\n- x\n- y\n\n### B\n\n[l](https://e.org)"
+        html = self.convert(markdown)
+        self.assertEqual(html.count("<h2>"), 1)
+        self.assertEqual(html.count("<h3>"), 1)
+        self.assertEqual(html.count("<li>"), 2)
+        self.assertEqual(html.count("<a "), 1)
 
 
 # --- ブラウザのスタブ -------------------------------------------------------
