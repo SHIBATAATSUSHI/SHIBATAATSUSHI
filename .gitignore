@@ -1,0 +1,16 @@
+# ログイン済みセッション(実質パスワード。絶対にコミットしない)
+secrets/
+*_state.json
+
+# 実アカウント設定(example のみコミットする)
+config/note_accounts.json
+
+# デバッグ用スクリーンショット
+screenshots/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env

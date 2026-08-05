@@ -8,6 +8,8 @@
 - `/analysis` — 動作分析・HealthKit
 - `/experiments` — 試行
 - `/docs` — ドキュメント・文章コンテンツ
+- `/posts` — note 投稿用のMarkdown原稿(`docs/note-auto-post.md` 参照)
+- `/config` — 設定ファイル。実データは `.gitignore`、`*.example.json` のみコミットする
 
 ## コーディング規約
 
@@ -20,6 +22,7 @@
 - 曖昧な依頼は着手前にゴール・制約・完了条件を1度だけ確認する(`/goal` スキル参照)。
 - 3つ以上の独立した調査・作業は並列化を検討する(`/parallel` スキル参照)。
 - ユーザーから修正・訂正を受けたら `/self-improve` でこのファイルの「学習ログ」に反映する。
+- 認証情報(cookie・パスワード)はコミットしない。環境変数か `.gitignore` 済みのファイルに置く。
 
 ## ブランチ運用
 

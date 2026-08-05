@@ -1,0 +1,20 @@
+{
+  "_comment": "cp config/note_accounts.example.json config/note_accounts.json して使う。パスワードはここに書かず環境変数名だけを書く。",
+  "default_account": "19770104",
+  "accounts": {
+    "19770104": {
+      "label": "柴田篤志 メインアカウント",
+      "urlname": "19770104",
+      "storage_state": "secrets/note_19770104_state.json",
+      "email_env": "NOTE_19770104_EMAIL",
+      "password_env": "NOTE_19770104_PASSWORD"
+    },
+    "akutagawa_tora": {
+      "label": "芥川寅(別コードで運用中。こちらから投げる場合のみ使用)",
+      "urlname": "akutagawa_tora",
+      "storage_state": "secrets/note_akutagawa_tora_state.json",
+      "email_env": "NOTE_AKUTAGAWA_TORA_EMAIL",
+      "password_env": "NOTE_AKUTAGAWA_TORA_PASSWORD"
+    }
+  }
+}
