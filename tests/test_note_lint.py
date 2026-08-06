@@ -334,14 +334,30 @@ def test_リンクが無い行は対象外():
     assert unread_findings("本文で何かが分かると書いても、本の紹介ではない。") == []
 
 
-def test_books_yamlから未読の本を読める():
+def test_books_yamlから未読の本だけを読める():
     unread = note_lint.load_unread_asins()
-    # 読了済みの2冊は入らない
-    assert "4087213129" not in unread
-    assert "4065431743" not in unread
-    # 未読の本は入る
-    assert "4003420934" in unread
-    assert "老子" in unread.values()
+    # read: done は入らない
+    assert "4087213129" not in unread  # なぜ働いていると本が読めなくなるのか
+    assert "4101035415" not in unread  # 暇と退屈の倫理学
+    # read: reading も入らない。読んだ範囲について書くのは正当なため
+    assert "4003420934" not in unread  # プロ倫
+    assert "4101035423" not in unread  # 中動態の世界
+    assert "4003320611" not in unread  # 荘子
+    # read: unread だけが対象
+    assert "4003320514" in unread  # 老子
+    assert "4910063056" in unread  # 世界は贈与でできている
+
+
+def test_読み途中の本は断定検査の対象外(tmp_path):
+    books = tmp_path / "books.yaml"
+    books.write_text(
+        'a:\n  read: reading\n  title: 読み途中の本\n  asin: "1111111111"\n'
+        'b:\n  read: unread\n  title: 未読の本\n  asin: "2222222222"\n'
+        'c:\n  read: done\n  title: 読了の本\n  asin: "3333333333"\n',
+        encoding="utf-8",
+    )
+    unread = note_lint.load_unread_asins(str(books))
+    assert list(unread) == ["2222222222"]
 
 
 def test_books_yamlが無くても落ちない():
@@ -368,6 +384,25 @@ def test_URLを含む行は長文として数えない():
     url = "https://shinsho-plus.shueisha.co.jp/interview/interview_category/miyake_mizuno_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     r = lint(f"# 題\n\n本文。\n\n- 参考: {url}")
     assert "long-sentence" not in codes(r)
+
+
+def test_刻みすぎると警告する():
+    # 上限だけ見ていると短いほうへ寄る事故に気づけない。実際に一度やった
+    choppy = "# 題\n\n" + "短い文である。" * 25
+    r = lint(choppy)
+    assert "too-choppy" in codes(r)
+
+
+def test_既存記事と同じ長さなら警告しない():
+    natural = "# 題\n\n" + ("あ" * 74 + "。") * 25
+    r = lint(natural)
+    assert "too-choppy" not in codes(r)
+
+
+def test_文が少なければ中央値を判定しない():
+    # 短い記事や書誌だけのファイルで誤検知しないよう、20文未満は見ない
+    r = lint("# 題\n\n短い。" * 3)
+    assert "too-choppy" not in codes(r)
 
 
 def test_同じ文末が3文続いたら警告():

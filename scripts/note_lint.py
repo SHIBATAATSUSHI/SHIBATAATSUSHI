@@ -21,6 +21,7 @@ import argparse
 import json
 import os
 import re
+import statistics
 import sys
 from dataclasses import dataclass, field
 
@@ -46,6 +47,12 @@ TITLE_MAX_CHARS = 40
 # このアカウントの文体そのもの。95パーセンタイルが145字前後だったため、
 # 本当の外れ値だけを拾う 150 に置いている。短く切ることを促す値ではない。
 SENTENCE_MAX_CHARS = 150
+
+# 文の長さの中央値がこれを下回ったら、刻みすぎ。
+# 既存記事の実測は74〜75字。一文の中で経験・概念・留保が動くのが
+# このアカウントの文体で、短く切ると別人の文章になる。
+# 上限(SENTENCE_MAX_CHARS)だけ見ていると短いほうへ寄る事故に気づけない。
+SENTENCE_MEDIAN_MIN = 60
 
 # 同じ文末がこの回数だけ続いたら単調とみなす。
 SAME_ENDING_RUN = 3
@@ -412,7 +419,11 @@ def _check_unpublished_section(path: str, markdown: str) -> list[Finding]:
 
 
 def load_unread_asins(books_path: str = BOOKS_PATH) -> dict[str, str]:
-    """books.yaml から、まだ読んでいない本の {asin: 書名} を取る。
+    """books.yaml から、**まだ開いていない**本の {asin: 書名} を取る。
+
+    対象は `read: unread` だけ。`reading`(読み途中)は含めない —
+    読んだ範囲について書くのは正当だし、どこまで読んだかは機械では
+    判定できないため。読み途中の扱いは STYLE.md のルールに委ねる。
 
     PyYAML を足さずに済ませたいので、`read` / `asin` / `title` の3つだけを
     拾う最小の読み取りにしている。この用途にはこれで足りる。
@@ -425,7 +436,7 @@ def load_unread_asins(books_path: str = BOOKS_PATH) -> dict[str, str]:
     entry: dict[str, str] = {}
 
     def flush() -> None:
-        if key and entry.get("read") == "false" and entry.get("asin"):
+        if key and entry.get("read") == "unread" and entry.get("asin"):
             unread[entry["asin"]] = entry.get("title", key)
 
     with open(books_path, encoding="utf-8") as f:
@@ -554,6 +565,23 @@ def _check_sentences(path: str, prose: list[_ProseLine]) -> list[Finding]:
                     LEVEL_WARNING,
                     "long-sentence",
                     f"一文が {len(sentence)} 字。{SENTENCE_MAX_CHARS} 字を超えると読みにくい",
+                )
+            )
+
+    # 全体として刻みすぎていないかを中央値で見る。
+    # 書誌一覧のような短い列挙に引きずられないよう、URL を含む文は
+    # _sentences() の時点で除いてある。
+    if len(sentences) >= 20:
+        median = statistics.median(len(s) for _n, s in sentences)
+        if median < SENTENCE_MEDIAN_MIN:
+            findings.append(
+                Finding(
+                    path,
+                    sentences[0][0],
+                    LEVEL_WARNING,
+                    "too-choppy",
+                    f"一文の中央値が {median:.0f} 字。既存記事は75字前後で、"
+                    "短く刻むとこのアカウントの文体から外れる",
                 )
             )
 
