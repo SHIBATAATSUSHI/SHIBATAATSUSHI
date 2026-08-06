@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 import note_lint
 
 
@@ -287,6 +289,63 @@ def test_収益の主張があれば参加者表示とみなす():
     ]:
         r = lint(f"# 題\n\n本文。\n\n{AMAZON_PLAIN}\n\n{claim}")
         assert "false-disclosure" in codes(r), claim
+
+
+# --------------------------------------------------------------------------
+# 未読の本の扱い
+# --------------------------------------------------------------------------
+
+# books.yaml の実データに依存しないよう、テスト用の未読リストを渡す
+UNREAD = {"4003420934": "プロテスタンティズムの倫理と資本主義の精神"}
+LINK = "[Amazonで見る](https://www.amazon.co.jp/dp/4003420934)"
+
+
+def unread_findings(text: str) -> list[str]:
+    """未読本の断定検査だけを走らせる。"""
+    return [f.code for f in note_lint._check_unread_assertions("<text>", text, UNREAD)]
+
+
+def test_未読の本の内容を断定すると指摘する():
+    # 実際に一度書いてしまった文言
+    text = f"- **プロ倫** — 働くこと自体が倫理になっていく過程の由来をたどれる。{LINK}"
+    assert "unread-assertion" in unread_findings(text)
+
+
+def test_見込みとして書けば指摘しない():
+    text = f"- **プロ倫** — どこから来たものなのかを遡るために読もうとしている。まだ手をつけていない。{LINK}"
+    assert unread_findings(text) == []
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    ["と論じている", "が分かる", "が見えてくる", "をたどれる", "と書かれている", "を教えてくれる"],
+)
+def test_断定の言い方をいくつか拾う(phrase: str):
+    assert "unread-assertion" in unread_findings(f"- 本 — 中身{phrase}。{LINK}")
+
+
+def test_読了済みの本なら断定してよい():
+    # 未読リストに無い ASIN は対象外
+    text = "- **なぜ働いていると本が読めなくなるのか** — 労働と読書の歴史が描かれている。[見る](https://www.amazon.co.jp/dp/4087213129)"
+    assert unread_findings(text) == []
+
+
+def test_リンクが無い行は対象外():
+    assert unread_findings("本文で何かが分かると書いても、本の紹介ではない。") == []
+
+
+def test_books_yamlから未読の本を読める():
+    unread = note_lint.load_unread_asins()
+    # 読了済みの2冊は入らない
+    assert "4087213129" not in unread
+    assert "4065431743" not in unread
+    # 未読の本は入る
+    assert "4003420934" in unread
+    assert "老子" in unread.values()
+
+
+def test_books_yamlが無くても落ちない():
+    assert note_lint.load_unread_asins("/nonexistent/books.yaml") == {}
 
 
 # --------------------------------------------------------------------------

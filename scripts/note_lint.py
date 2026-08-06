@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from dataclasses import dataclass, field
@@ -69,6 +70,18 @@ AFFILIATE_DISCLOSURE = re.compile(
 
 # 自分向けのメモらしき見出し。これが公開範囲に残っていたら事故。
 MEMO_HEADING = re.compile(r"投稿設定|見出し画像案|公開設定|メモ書き")
+
+# まだ読んでいない本について、内容を保証してしまう言い方。
+# 「〜と論じている」のように中身を断定するものだけを拾い、
+# 「〜と考えている」「〜を読み直せないか」のような見込みの言い方は通す。
+ASSERTION = re.compile(
+    r"と論じている|と書かれている|が分かる|がわかる|が見えてくる|"
+    r"をたどれる|が描かれている|と述べている|を示している|"
+    r"が理解できる|を教えてくれる|が得られる"
+)
+
+# 書誌の登録簿。scripts/ から見た相対位置。
+BOOKS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "docs", "note", "books.yaml")
 
 # note が解釈しない記法。書いてもそのまま文字として出てしまう。
 UNSUPPORTED = [
@@ -398,6 +411,78 @@ def _check_unpublished_section(path: str, markdown: str) -> list[Finding]:
     return findings
 
 
+def load_unread_asins(books_path: str = BOOKS_PATH) -> dict[str, str]:
+    """books.yaml から、まだ読んでいない本の {asin: 書名} を取る。
+
+    PyYAML を足さずに済ませたいので、`read` / `asin` / `title` の3つだけを
+    拾う最小の読み取りにしている。この用途にはこれで足りる。
+    """
+    if not os.path.exists(books_path):
+        return {}
+
+    unread: dict[str, str] = {}
+    key: str | None = None
+    entry: dict[str, str] = {}
+
+    def flush() -> None:
+        if key and entry.get("read") == "false" and entry.get("asin"):
+            unread[entry["asin"]] = entry.get("title", key)
+
+    with open(books_path, encoding="utf-8") as f:
+        for raw in f:
+            line = raw.rstrip()
+            if not line or line.lstrip().startswith("#"):
+                continue
+            if not line.startswith(" "):
+                flush()
+                key, entry = line.rstrip(":"), {}
+                continue
+            field, _, value = line.strip().partition(":")
+            if field in ("read", "asin", "title"):
+                entry[field] = value.strip().strip("\"'")
+    flush()
+    return unread
+
+
+def _check_unread_assertions(
+    path: str, markdown: str, unread: dict[str, str]
+) -> list[Finding]:
+    """まだ読んでいない本について、内容を断定していないか見る。
+
+    読んでいない本を「〜と論じている」と紹介すると、読者に対して内容を
+    保証したことになる。見込みとして書くなら問題ない。
+    """
+    if not unread:
+        return []
+
+    publishable, offset = _publishable(markdown)
+    findings: list[Finding] = []
+    in_code = False
+    for i, raw in enumerate(publishable.splitlines(), start=1):
+        stripped = raw.strip()
+        if _FENCE_RE.match(stripped):
+            in_code = not in_code
+            continue
+        if in_code or not stripped:
+            continue
+        for asin, title in unread.items():
+            if asin not in stripped:
+                continue
+            m = ASSERTION.search(stripped)
+            if m:
+                findings.append(
+                    Finding(
+                        path,
+                        offset + i,
+                        LEVEL_WARNING,
+                        "unread-assertion",
+                        f"『{title}』は未読(books.yaml)なのに「{m.group(0)}」と"
+                        "内容を断定している。見込みとして書く",
+                    )
+                )
+    return findings
+
+
 def _check_affiliate(path: str, markdown: str) -> list[Finding]:
     """Amazon リンクとアソシエイト表示の整合を見る。
 
@@ -529,6 +614,7 @@ def lint_text(
     report.findings.extend(_check_headings(path, markdown))
     report.findings.extend(_check_unsupported(path, markdown))
     report.findings.extend(_check_unpublished_section(path, markdown))
+    report.findings.extend(_check_unread_assertions(path, markdown, load_unread_asins()))
     report.findings.extend(_check_affiliate(path, markdown))
     report.findings.extend(_check_sentences(path, prose))
     report.findings.sort(key=lambda f: (f.line, f.code))

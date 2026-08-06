@@ -13,6 +13,7 @@
 # ここの asin から生成する形にして、差し替えを1箇所で済ませる。
 
 yomenaku:
+  read: true
   title: なぜ働いていると本が読めなくなるのか
   author: 三宅香帆
   publisher: 集英社新書
@@ -22,6 +23,7 @@ yomenaku:
   publisher_url: https://www.shueisha.co.jp/books/items/contents.html?isbn=978-4-08-721312-6
 
 fuufu-fuzai:
+  read: true
   title: 「夫婦」不在社会
   author: 三宅香帆
   publisher: 講談社
@@ -31,6 +33,7 @@ fuufu-fuzai:
   publisher_url: https://www.kodansha.co.jp/book/products/0000425632
 
 hima-taikutsu:
+  read: false
   title: 暇と退屈の倫理学
   author: 國分功一郎
   publisher: 新潮文庫
@@ -40,6 +43,7 @@ hima-taikutsu:
   publisher_url: https://www.shinchosha.co.jp/book/103541/
 
 chudotai:
+  read: false
   title: 中動態の世界 意志と責任の考古学
   author: 國分功一郎
   publisher: 新潮文庫
@@ -52,6 +56,7 @@ chudotai:
   # 入手しやすさから文庫版を案内する。
 
 pro-rin:
+  read: false
   title: プロテスタンティズムの倫理と資本主義の精神
   author: マックス・ヴェーバー
   translator: 大塚久雄
@@ -62,6 +67,7 @@ pro-rin:
   publisher_url: https://www.iwanami.co.jp/book/b248662.html
 
 laozi:
+  read: false
   title: 老子
   translator: 蜂屋邦夫
   publisher: 岩波文庫
@@ -70,6 +76,7 @@ laozi:
   publisher_url: https://www.iwanami.co.jp/book/b246246.html
 
 zhuangzi-1:
+  read: false
   title: 荘子 第一冊 内篇
   translator: 金谷治
   publisher: 岩波文庫
@@ -78,6 +85,7 @@ zhuangzi-1:
   publisher_url: https://www.iwanami.co.jp/book/b270781.html
 
 zoyo:
+  read: false
   title: 世界は贈与でできている──資本主義の「すきま」を埋める倫理学
   author: 近内悠太
   publisher: NewsPicksパブリッシング
