@@ -14,7 +14,13 @@ def codes(report: note_lint.LintReport) -> list[str]:
 
 
 def lint(text: str, **kwargs) -> note_lint.LintReport:
-    """タイトル欠落の指摘が邪魔なときのために、既定でタイトルを補う。"""
+    """テスト用の呼び出し。
+
+    テスト本文は短いので、文字数チェックは既定で切っておく(長さを検査したい
+    テストだけ `min_chars` / `max_chars` を明示する)。
+    """
+    kwargs.setdefault("min_chars", None)
+    kwargs.setdefault("max_chars", None)
     return note_lint.lint_text(text, **kwargs)
 
 
@@ -130,8 +136,14 @@ def test_長すぎるタイトルは警告():
 # 文字数
 # --------------------------------------------------------------------------
 
-def test_文字数の目安は指定しなければ検査しない():
-    r = lint("# 題\n\n短い。")
+def test_既定の文字数レンジは既存記事の実測から決めている():
+    # 記事01=3,963字 / 記事02=3,988字 に関連書籍セクション分の余裕を足した幅
+    assert note_lint.TARGET_MIN_CHARS == 3500
+    assert note_lint.TARGET_MAX_CHARS == 5000
+
+
+def test_Noneを渡せば文字数を検査しない():
+    r = lint("# 題\n\n短い。", min_chars=None)
     assert "too-short" not in codes(r)
 
 
@@ -182,6 +194,40 @@ def test_toc記法は未対応扱いしない():
 
 
 # --------------------------------------------------------------------------
+# 投稿しないマーカー(公開事故の防止)
+# --------------------------------------------------------------------------
+
+MEMO = "## note投稿設定\n\n- 見出し画像案: 夜の机に本を置く\n- 推奨設定: 無料"
+
+
+def test_マーカーが無いメモ見出しは指摘する():
+    r = lint(f"# 題\n\n本文。\n\n{MEMO}")
+    assert "unpublished-section" in codes(r)
+
+
+def test_マーカーがあれば指摘しない():
+    r = lint(f"# 題\n\n本文。\n\n<!-- 投稿しない -->\n\n{MEMO}")
+    assert "unpublished-section" not in codes(r)
+
+
+def test_マーカー以降は文字数に数えない():
+    with_memo = lint(f"# 題\n\n本文。\n\n<!-- 投稿しない -->\n\n{MEMO}")
+    without = lint("# 題\n\n本文。")
+    assert with_memo.text_length == without.text_length
+
+
+def test_マーカー以降の一人称は数えない():
+    r = lint("# 題\n\n本文。\n\n<!-- 投稿しない -->\n\nメモ: 私はこう書くつもりだった。")
+    assert r.first_person_count == 0
+
+
+def test_マーカー以降の記法は指摘しない():
+    # メモに表を書いても、公開されないので警告する意味がない
+    r = lint("# 題\n\n本文。\n\n<!-- 投稿しない -->\n\n| A | B |\n|---|---|")
+    assert "unsupported" not in codes(r)
+
+
+# --------------------------------------------------------------------------
 # Amazon アソシエイト
 # --------------------------------------------------------------------------
 
@@ -224,13 +270,45 @@ def test_amzn_toの短縮リンクも見る():
     assert "no-disclosure" in codes(r)
 
 
+def test_将来形の説明を参加者表示と誤検知しない():
+    # 既存2本の冒頭にあるこの一文を false-disclosure にしていた(誤検知)
+    notice = (
+        "現在のAmazonリンクは通常の商品リンクであり、芥川寅之介への紹介料は発生しません。"
+        "Amazonアソシエイトを有効にした場合は、記事冒頭にその旨を明記します。"
+    )
+    r = lint(f"# 題\n\n{notice}\n\n{AMAZON_PLAIN}")
+    assert "false-disclosure" not in codes(r)
+
+
+def test_収益の主張があれば参加者表示とみなす():
+    for claim in [
+        "Amazonのアソシエイトとして、適格販売により収入を得ています。",
+        "リンクを経由して購入すると、筆者に紹介料が入る場合があります。",
+    ]:
+        r = lint(f"# 題\n\n本文。\n\n{AMAZON_PLAIN}\n\n{claim}")
+        assert "false-disclosure" in codes(r), claim
+
+
 # --------------------------------------------------------------------------
 # 文の検査
 # --------------------------------------------------------------------------
 
 def test_長すぎる一文は警告():
-    r = lint("# 題\n\n" + "あ" * 150 + "。")
+    r = lint("# 題\n\n" + "あ" * 200 + "。")
     assert "long-sentence" in codes(r)
+
+
+def test_120字程度の一文は許容する():
+    # 既存記事では100字超が2〜3割あり、長い一文はこのアカウントの文体
+    r = lint("# 題\n\n" + "あ" * 120 + "。")
+    assert "long-sentence" not in codes(r)
+
+
+def test_URLを含む行は長文として数えない():
+    # 参考資料の URL 行を「一文が117字」と誤検知していた
+    url = "https://shinsho-plus.shueisha.co.jp/interview/interview_category/miyake_mizuno_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    r = lint(f"# 題\n\n本文。\n\n- 参考: {url}")
+    assert "long-sentence" not in codes(r)
 
 
 def test_同じ文末が3文続いたら警告():

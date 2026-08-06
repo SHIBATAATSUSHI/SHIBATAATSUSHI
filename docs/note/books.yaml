@@ -1,0 +1,85 @@
+# 書評で扱う本の書誌
+#
+# 同じ本が複数の記事に登場する(老子・荘子・國分功一郎は複数記事にまたがる)。
+# 毎回手で書くと出版社や版を取り違えるため、ここを唯一の情報源にする。
+#
+# ルール:
+#   - 出版社の公式ページか、それに準じる情報源で確認したものだけを登録する
+#   - ISBN-13 から ISBN-10(= Amazon の ASIN)を推測で書かない。
+#     チェックディジットを誤ると別の本のページへ飛ぶ
+#   - asin は実際の Amazon 商品ページ URL から取る
+#
+# アソシエイト参加後は、各記事のリンクを書き換えるのではなく
+# ここの asin から生成する形にして、差し替えを1箇所で済ませる。
+
+yomenaku:
+  title: なぜ働いていると本が読めなくなるのか
+  author: 三宅香帆
+  publisher: 集英社新書
+  year: 2024
+  isbn13: "9784087213126"
+  asin: "4087213129"
+  publisher_url: https://www.shueisha.co.jp/books/items/contents.html?isbn=978-4-08-721312-6
+
+fuufu-fuzai:
+  title: 「夫婦」不在社会
+  author: 三宅香帆
+  publisher: 講談社
+  year: 2026
+  isbn13: "9784065431740"
+  asin: "4065431743"
+  publisher_url: https://www.kodansha.co.jp/book/products/0000425632
+
+hima-taikutsu:
+  title: 暇と退屈の倫理学
+  author: 國分功一郎
+  publisher: 新潮文庫
+  year: 2021
+  isbn13: "9784101035413"
+  asin: "4101035415"
+  publisher_url: https://www.shinchosha.co.jp/book/103541/
+
+chudotai:
+  title: 中動態の世界 意志と責任の考古学
+  author: 國分功一郎
+  publisher: 新潮文庫
+  year: 2025
+  isbn13: "9784101035420"
+  asin: "4101035423"
+  publisher_url: https://www.shinchosha.co.jp/book/103542/
+  # 初出は医学書院「シリーズ ケアをひらく」(2017, ISBN 9784260031578)。
+  # 入手しやすさから文庫版を案内する。
+
+pro-rin:
+  title: プロテスタンティズムの倫理と資本主義の精神
+  author: マックス・ヴェーバー
+  translator: 大塚久雄
+  publisher: 岩波文庫
+  year: 1989
+  isbn13: "9784003420935"
+  asin: "4003420934"
+  publisher_url: https://www.iwanami.co.jp/book/b248662.html
+
+laozi:
+  title: 老子
+  translator: 蜂屋邦夫
+  publisher: 岩波文庫
+  isbn13: "9784003320518"
+  asin: "4003320514"
+  publisher_url: https://www.iwanami.co.jp/book/b246246.html
+
+zhuangzi-1:
+  title: 荘子 第一冊 内篇
+  translator: 金谷治
+  publisher: 岩波文庫
+  isbn13: "9784003320617"
+  asin: "4003320611"
+  publisher_url: https://www.iwanami.co.jp/book/b270781.html
+
+zoyo:
+  title: 世界は贈与でできている──資本主義の「すきま」を埋める倫理学
+  author: 近内悠太
+  publisher: NewsPicksパブリッシング
+  year: 2020
+  isbn13: "9784910063058"
+  asin: "4910063056"

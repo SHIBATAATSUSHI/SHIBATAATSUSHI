@@ -23,7 +23,7 @@ import re
 import sys
 from dataclasses import dataclass, field
 
-from note_markdown import convert, split_front_matter
+from note_markdown import convert, split_front_matter, split_publishable
 
 LEVEL_ERROR = "error"
 LEVEL_WARNING = "warning"
@@ -32,16 +32,19 @@ LEVEL_WARNING = "warning"
 # 検査のしきい値
 # --------------------------------------------------------------------------
 
-# 本文の文字数の目安。既存記事の実測から決めるまでは無効にしておく。
-# (根拠のない数字を置くと警告がただの雑音になるため)
-TARGET_MIN_CHARS: int | None = None
-TARGET_MAX_CHARS: int | None = None
+# 本文の文字数の目安。既存記事の実測(記事01=3,963字 / 記事02=3,988字)に、
+# 関連書籍セクション分の余裕を足した幅。
+TARGET_MIN_CHARS: int | None = 3500
+TARGET_MAX_CHARS: int | None = 5000
 
 # note の記事一覧ではタイトルが途中で切れる。全角でこの程度が目安。
 TITLE_MAX_CHARS = 40
 
-# 一文がこれを超えると読みにくい。句点で区切って数える。
-SENTENCE_MAX_CHARS = 100
+# 一文がこれを超えたら見直す。
+# 既存2本の実測では中央値が74〜76字、100字超が22〜33%あり、長い一文は
+# このアカウントの文体そのもの。95パーセンタイルが145字前後だったため、
+# 本当の外れ値だけを拾う 150 に置いている。短く切ることを促す値ではない。
+SENTENCE_MAX_CHARS = 150
 
 # 同じ文末がこの回数だけ続いたら単調とみなす。
 SAME_ENDING_RUN = 3
@@ -57,7 +60,15 @@ FIRST_PERSON_OTHER = re.compile(r"私(?!たち)[がのもにをと]|わたし(?!
 # アソシエイトの専用リンクは URL に tag= が付く(通常リンクには付かない)。
 AMAZON_LINK = re.compile(r"https?://(?:www\.)?(?:amazon\.co\.jp|amzn\.(?:to|asia))/[^\s)]*")
 AMAZON_AFFILIATE_TAG = re.compile(r"[?&]tag=")
-AFFILIATE_DISCLOSURE = re.compile(r"アソシエイト")
+# 参加者表示は「アソシエイト」の語ではなく、**収益を得ているという主張**で判定する。
+# 「アソシエイトを有効にした場合は明記します」のような将来形や、
+# 「紹介料は発生しません」という否定形を誤検知しないため。
+AFFILIATE_DISCLOSURE = re.compile(
+    r"適格販売|収入を得て(?:い|お)|紹介料が入る|紹介料を得て"
+)
+
+# 自分向けのメモらしき見出し。これが公開範囲に残っていたら事故。
+MEMO_HEADING = re.compile(r"投稿設定|見出し画像案|公開設定|メモ書き")
 
 # note が解釈しない記法。書いてもそのまま文字として出てしまう。
 UNSUPPORTED = [
@@ -130,6 +141,8 @@ def _prose_lines(markdown: str) -> tuple[list[_ProseLine], dict[str, str], str |
     戻り値は (散文の行, フロントマター, タイトル)。
     """
     meta, body, offset = split_front_matter(markdown)
+    # 「投稿しない」マーカー以降は公開されないので検査対象から外す
+    body, _memo = split_publishable(body)
     lines = body.splitlines()
 
     title: str | None = meta.get("title") or None
@@ -168,10 +181,14 @@ def _prose_lines(markdown: str) -> tuple[list[_ProseLine], dict[str, str], str |
 
 
 def _sentences(prose: list[_ProseLine]) -> list[tuple[int, str]]:
-    """句点で区切った文を (行番号, 文) で返す。見出しと引用は対象外。"""
+    """句点で区切った文を (行番号, 文) で返す。
+
+    見出し・引用は対象外。URL を含む行(参考資料の列挙など)も、句点で
+    区切れず「一文が117字」のように誤検知するため外す。
+    """
     out: list[tuple[int, str]] = []
     for line in prose:
-        if line.is_heading or line.in_quote:
+        if line.is_heading or line.in_quote or "http" in line.text:
             continue
         for part in re.split(r"(?<=。)", line.text):
             part = part.strip()
@@ -292,9 +309,10 @@ def _check_title(path: str, title: str | None) -> list[Finding]:
 
 def _check_headings(path: str, markdown: str) -> list[Finding]:
     """note が持たない見出しレベルを使っていないか見る。"""
+    publishable, offset = _publishable(markdown)
     findings: list[Finding] = []
     in_code = False
-    for i, raw in enumerate(markdown.splitlines(), start=1):
+    for i, raw in enumerate(publishable.splitlines(), start=1):
         stripped = raw.strip()
         if _FENCE_RE.match(stripped):
             in_code = not in_code
@@ -306,7 +324,7 @@ def _check_headings(path: str, markdown: str) -> list[Finding]:
             findings.append(
                 Finding(
                     path,
-                    i,
+                    offset + i,
                     LEVEL_WARNING,
                     "deep-heading",
                     f"`{m.group(1)}` は note に無いので h3 に丸められる",
@@ -317,9 +335,10 @@ def _check_headings(path: str, markdown: str) -> list[Finding]:
 
 def _check_unsupported(path: str, markdown: str) -> list[Finding]:
     """note が解釈しない記法を拾う。"""
+    publishable, offset = _publishable(markdown)
     findings: list[Finding] = []
     in_code = False
-    for i, raw in enumerate(markdown.splitlines(), start=1):
+    for i, raw in enumerate(publishable.splitlines(), start=1):
         stripped = raw.strip()
         if _FENCE_RE.match(stripped):
             in_code = not in_code
@@ -328,8 +347,54 @@ def _check_unsupported(path: str, markdown: str) -> list[Finding]:
             continue
         for pattern, message in UNSUPPORTED:
             if pattern.search(stripped):
-                findings.append(Finding(path, i, LEVEL_WARNING, "unsupported", message))
+                findings.append(
+                    Finding(path, offset + i, LEVEL_WARNING, "unsupported", message)
+                )
                 break
+    return findings
+
+
+def _publishable(markdown: str) -> tuple[str, int]:
+    """公開される本文と、元ファイルの行番号へ戻すためのずれを返す。
+
+    フロントマターと「投稿しない」マーカー以降を除いた範囲が、実際に note へ
+    出る部分。検査はすべてこの範囲に対して行う。
+    """
+    _meta, body, offset = split_front_matter(markdown)
+    publishable, _memo = split_publishable(body)
+    return publishable, offset
+
+
+def _check_unpublished_section(path: str, markdown: str) -> list[Finding]:
+    """自分向けのメモが公開範囲に残っていないか見る。
+
+    推奨タグ・見出し画像案のようなメモを記事と同じファイルに置くのは便利だが、
+    `<!-- 投稿しない -->` マーカーが無いと**そのまま公開記事の末尾に出る**。
+    実際に既存2本がこの状態だった。
+    """
+    publishable, offset = _publishable(markdown)
+
+    findings: list[Finding] = []
+    in_code = False
+    for i, raw in enumerate(publishable.splitlines()):
+        stripped = raw.strip()
+        if _FENCE_RE.match(stripped):
+            in_code = not in_code
+            continue
+        if in_code:
+            continue
+        heading = _HEADING_RE.match(stripped)
+        if heading and MEMO_HEADING.search(heading.group(2)):
+            findings.append(
+                Finding(
+                    path,
+                    offset + i + 1,
+                    LEVEL_WARNING,
+                    "unpublished-section",
+                    f"「{heading.group(2).strip()}」は自分向けのメモに見える。"
+                    "このままだと公開記事に出る。直前に <!-- 投稿しない --> を置く",
+                )
+            )
     return findings
 
 
@@ -344,13 +409,14 @@ def _check_affiliate(path: str, markdown: str) -> list[Finding]:
        → まだ参加していない段階で「収入を得ています」と書くことになり、
          事実に反する。通常リンクのまま公開する期間に起きやすい。
     """
+    publishable, offset = _publishable(markdown)
     findings: list[Finding] = []
     has_affiliate_link = False
     disclosure_line: int | None = None
     link_line: int | None = None
 
     in_code = False
-    for i, raw in enumerate(markdown.splitlines(), start=1):
+    for i, raw in enumerate(publishable.splitlines(), start=1):
         stripped = raw.strip()
         if _FENCE_RE.match(stripped):
             in_code = not in_code
@@ -359,11 +425,11 @@ def _check_affiliate(path: str, markdown: str) -> list[Finding]:
             continue
         for m in AMAZON_LINK.finditer(stripped):
             if link_line is None:
-                link_line = i
+                link_line = offset + i
             if AMAZON_AFFILIATE_TAG.search(m.group(0)):
                 has_affiliate_link = True
         if disclosure_line is None and AFFILIATE_DISCLOSURE.search(stripped):
-            disclosure_line = i
+            disclosure_line = offset + i
 
     if has_affiliate_link and disclosure_line is None:
         findings.append(
@@ -462,6 +528,7 @@ def lint_text(
     report.findings.extend(_check_length(path, report.text_length, min_chars, max_chars))
     report.findings.extend(_check_headings(path, markdown))
     report.findings.extend(_check_unsupported(path, markdown))
+    report.findings.extend(_check_unpublished_section(path, markdown))
     report.findings.extend(_check_affiliate(path, markdown))
     report.findings.extend(_check_sentences(path, prose))
     report.findings.sort(key=lambda f: (f.line, f.code))

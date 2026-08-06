@@ -183,6 +183,27 @@ def split_front_matter(text: str) -> tuple[dict[str, str], str, int]:
     return {}, text, 0
 
 
+# 本文の終わりを示すマーカー。これ以降は投稿に含めない。
+# 推奨タグや見出し画像案のような自分向けのメモを、記事と同じファイルに
+# 置いたまま公開事故を防ぐための仕組み。
+_STOP_RE = re.compile(
+    r"^<!--\s*(?:投稿しない|ここから下は投稿しない|draft-only|no-post)\s*-->$",
+    re.IGNORECASE,
+)
+
+
+def split_publishable(body: str) -> tuple[str, str]:
+    """「投稿しない」マーカーで、公開する本文と自分向けメモに分ける。
+
+    戻り値は (公開する本文, メモ)。マーカーが無ければメモは空文字。
+    """
+    lines = body.splitlines()
+    for i, line in enumerate(lines):
+        if _STOP_RE.match(line.strip()):
+            return "\n".join(lines[:i]), "\n".join(lines[i + 1:])
+    return body, ""
+
+
 def _parse_tags(raw: str) -> list[str]:
     """`tags: [A, B]` / `tags: A, B` のどちらの書き方も配列にする。"""
     raw = raw.strip().strip("[]")
@@ -209,6 +230,8 @@ def convert(
         base_dir: 画像の相対パスを解決する基準ディレクトリ。
     """
     meta, body, _ = split_front_matter(markdown)
+    # 「投稿しない」マーカー以降は変換対象から外す
+    body, _memo = split_publishable(body)
 
     title: str | None = meta.get("title") or None
     tags = _parse_tags(meta["tags"]) if meta.get("tags") else []

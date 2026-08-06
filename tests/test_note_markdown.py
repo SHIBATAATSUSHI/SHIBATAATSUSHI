@@ -183,6 +183,51 @@ def test_フロントマターのタイトルが先頭見出しより優先さ�
 
 
 # --------------------------------------------------------------------------
+# 投稿しないマーカー
+# --------------------------------------------------------------------------
+
+def test_マーカー以降は変換されない():
+    r = nm.convert("# 題\n\n本文。\n\n<!-- 投稿しない -->\n\n## note投稿設定\n\n- 見出し画像案: 机")
+    assert "本文。" in r.body_html
+    assert "note投稿設定" not in r.body_html
+    assert "見出し画像案" not in r.body_html
+
+
+def test_マーカーが無ければ全部変換される():
+    r = nm.convert("# 題\n\n本文。\n\n## note投稿設定\n\n- 見出し画像案: 机")
+    assert "note投稿設定" in r.body_html
+
+
+@pytest.mark.parametrize(
+    "marker",
+    ["<!-- 投稿しない -->", "<!-- ここから下は投稿しない -->", "<!-- draft-only -->", "<!-- no-post -->"],
+)
+def test_マーカーの書き方をいくつか受け付ける(marker: str):
+    r = nm.convert(f"# 題\n\n本文。\n\n{marker}\n\nメモ")
+    assert "メモ" not in r.body_html
+
+
+def test_split_publishableは本文とメモを分ける():
+    body, memo = nm.split_publishable("本文\n\n<!-- 投稿しない -->\n\nメモ")
+    assert body.strip() == "本文"
+    assert memo.strip() == "メモ"
+
+
+def test_マーカーが無ければメモは空():
+    body, memo = nm.split_publishable("本文だけ")
+    assert body == "本文だけ"
+    assert memo == ""
+
+
+def test_フロントマターとマーカーは併用できる():
+    r = nm.convert("---\ntitle: 題\ntags: [A]\n---\n\n本文。\n\n<!-- 投稿しない -->\n\nメモ")
+    assert r.title == "題"
+    assert r.tags == ["A"]
+    assert "本文。" in r.body_html
+    assert "メモ" not in r.body_html
+
+
+# --------------------------------------------------------------------------
 # 目次・画像
 # --------------------------------------------------------------------------
 
