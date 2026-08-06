@@ -74,6 +74,29 @@ pro-rin:
   asin: "4003420934"
   publisher_url: https://www.iwanami.co.jp/book/b248662.html
 
+# 老荘は、原典の訳注に入る前に入門書から読む。記事で案内するのは入門書のほう。
+
+laozi-kamitsuka:
+  read: unread
+  title: 老子 〈道〉への回帰
+  author: 神塚淑子
+  publisher: 岩波書店
+  series: 書物誕生 あたらしい古典入門
+  year: 2009
+  asin: "4000282964"
+
+zhuangzi-nakajima:
+  read: reading
+  title: 荘子 鶏となって時を告げよ
+  author: 中島隆博
+  publisher: 岩波書店
+  series: 書物誕生 あたらしい古典入門
+  year: 2009
+  isbn13: "9784000282925"
+  asin: "4000282921"
+
+# 以下は原典の訳注。入門書のあとで読む想定。
+
 laozi:
   read: unread
   title: 老子
@@ -84,7 +107,7 @@ laozi:
   publisher_url: https://www.iwanami.co.jp/book/b246246.html
 
 zhuangzi-1:
-  read: reading
+  read: unread
   title: 荘子 第一冊 内篇
   translator: 金谷治
   publisher: 岩波文庫
