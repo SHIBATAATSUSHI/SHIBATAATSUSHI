@@ -342,10 +342,13 @@ def test_books_yamlから未読の本だけを読める():
     # read: reading も入らない。読んだ範囲について書くのは正当なため
     assert "4003420934" not in unread  # プロ倫
     assert "4101035423" not in unread  # 中動態の世界
-    assert "4003320611" not in unread  # 荘子
+    assert "4000282921" not in unread  # 荘子 鶏となって時を告げよ(中島隆博)
     # read: unread だけが対象
-    assert "4003320514" in unread  # 老子
+    assert "4000282964" in unread  # 老子 〈道〉への回帰(神塚淑子)
     assert "4910063056" in unread  # 世界は贈与でできている
+    # 原典の訳注は入門書のあとに読むので、いずれも未読
+    assert "4003320514" in unread  # 老子(岩波文庫)
+    assert "4003320611" in unread  # 荘子 第一冊 内篇(岩波文庫)
 
 
 def test_読み途中の本は断定検査の対象外(tmp_path):
