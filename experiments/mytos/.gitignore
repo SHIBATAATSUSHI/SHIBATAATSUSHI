@@ -1,0 +1,8 @@
+# セッションの保存先(作業ディレクトリごとに作られる)
+.mytos/
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
