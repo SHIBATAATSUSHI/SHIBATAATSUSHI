@@ -1,4 +1,4 @@
-"""Mythos がモデルに渡すツール群の定義と実行。
+"""Shibata Code がモデルに渡すツール群の定義と実行。
 
 ツールの説明文は「何をするか」だけでなく「いつ呼ぶか」まで書く。
 最近のモデルは説明に書かれた呼び出し条件をよく読むので、
@@ -40,7 +40,7 @@ IGNORED_DIRS = {
     ".ruff_cache",
     "dist",
     "build",
-    ".mythos",
+    ".shibata_code",
 }
 
 
@@ -61,12 +61,23 @@ class ToolSpec:
     # 端末に出す1行サマリの作り方
     summarize: Callable[[dict[str, Any]], str]
 
-    def to_api(self) -> dict[str, Any]:
-        """Messages API に渡す形へ変換する。"""
+    def to_anthropic(self) -> dict[str, Any]:
+        """Anthropic Messages API に渡す形へ変換する。"""
         return {
             "name": self.name,
             "description": self.description,
             "input_schema": self.input_schema,
+        }
+
+    def to_openai(self) -> dict[str, Any]:
+        """OpenAI 互換の tools 形式へ変換する。"""
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": self.input_schema,
+            },
         }
 
 
@@ -127,12 +138,12 @@ class Toolbox:
         return self._specs[name]
 
     def api_schemas(self) -> list[dict[str, Any]]:
-        """Messages API の tools パラメータに渡すリスト。
+        """Anthropic の tools パラメータに渡すリスト。
 
         並びを固定しておかないとプロンプトキャッシュが無効化されるため、
         登録順(=決定的)をそのまま使う。
         """
-        return [spec.to_api() for spec in self._specs.values()]
+        return [spec.to_anthropic() for spec in self._specs.values()]
 
     def run(self, name: str, payload: dict[str, Any]) -> str:
         """ツールを実行して結果文字列を返す。失敗時は ToolError。"""

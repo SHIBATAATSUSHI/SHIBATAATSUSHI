@@ -1,4 +1,4 @@
-"""`python -m mythos` で起動するためのエントリポイント。"""
+"""`python -m shibata_code` で起動するためのエントリポイント。"""
 
 from __future__ import annotations
 

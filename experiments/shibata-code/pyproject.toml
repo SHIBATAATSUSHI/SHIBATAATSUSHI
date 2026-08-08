@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shibata-code"
+version = "0.2.0"
+description = "端末で動くコーディングエージェント(複数モデル対応)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["anthropic>=0.121.0", "openai>=2.0.0"]
+
+[project.scripts]
+shibata-code = "shibata_code.cli:main"
+
+[tool.setuptools]
+packages = ["shibata_code", "shibata_code.backends"]

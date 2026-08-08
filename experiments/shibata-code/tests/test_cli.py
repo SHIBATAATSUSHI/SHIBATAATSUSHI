@@ -8,17 +8,16 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from mythos.agent import Agent  # noqa: E402
-from mythos.cli import Repl, build_parser, compose_prompt, main  # noqa: E402
-from mythos.config import build_config  # noqa: E402
-from mythos.session import Session  # noqa: E402
-from mythos.tools import Toolbox  # noqa: E402
-from mythos.ui import UI  # noqa: E402
-from mythos.workspace import Workspace  # noqa: E402
+from shibata_code.agent import Agent  # noqa: E402
+from shibata_code.cli import Repl, build_parser, compose_prompt, main  # noqa: E402
+from shibata_code.config import build_config  # noqa: E402
+from shibata_code.session import Session  # noqa: E402
+from shibata_code.tools import Toolbox  # noqa: E402
+from shibata_code.ui import UI  # noqa: E402
+from shibata_code.workspace import Workspace  # noqa: E402
 
 
 class ParserTest(unittest.TestCase):
@@ -73,9 +72,8 @@ class ReplCommandTest(unittest.TestCase):
         self.buffer = io.StringIO()
         self.ui = UI(color=False, stream=self.buffer)
         config = build_config(workspace=self.root)
-        # スラッシュコマンドしか叩かないので、クライアントはダミーでよい。
+        # スラッシュコマンドしか叩かないので、通信は起きない。
         self.agent = Agent(
-            client=SimpleNamespace(messages=None, beta=None),
             config=config,
             toolbox=Toolbox(Workspace(self.root)),
             session=Session(workspace=self.root),
@@ -104,6 +102,31 @@ class ReplCommandTest(unittest.TestCase):
     def test_model単体なら現在値を表示する(self) -> None:
         self.repl.handle_command("/model")
         self.assertIn("claude-opus-5", self.output)
+
+    def test_プロバイダを跨いでモデルを変更できる(self) -> None:
+        self.repl.handle_command("/model deepseek")
+        self.assertEqual(self.agent.config.model.provider, "deepseek")
+        self.assertEqual(self.agent.config.model.id, "deepseek-chat")
+
+    def test_プロバイダ指定の書き方も使える(self) -> None:
+        self.repl.handle_command("/model openrouter:z-ai/glm-5.2")
+        self.assertEqual(self.agent.config.model.provider, "openrouter")
+        self.assertEqual(self.agent.config.model.id, "z-ai/glm-5.2")
+
+    def test_未知のプロバイダはエラーで変更しない(self) -> None:
+        self.repl.handle_command("/model そんなの:x")
+        self.assertEqual(self.agent.config.model.provider, "anthropic")
+        self.assertIn("未知のプロバイダ", self.output)
+
+    def test_modelsは一覧を出す(self) -> None:
+        self.repl.handle_command("/models")
+        for name in ("opus", "gemini", "deepseek", "kimi", "qwen"):
+            self.assertIn(name, self.output)
+
+    def test_providersは環境変数を出す(self) -> None:
+        self.repl.handle_command("/providers")
+        self.assertIn("ANTHROPIC_API_KEY", self.output)
+        self.assertIn("OPENROUTER_API_KEY", self.output)
 
     def test_effortを変更できる(self) -> None:
         self.repl.handle_command("/effort low")

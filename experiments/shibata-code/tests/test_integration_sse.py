@@ -21,12 +21,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import anthropic  # noqa: E402
 
-from mythos.agent import Agent  # noqa: E402
-from mythos.config import build_config  # noqa: E402
-from mythos.session import Session  # noqa: E402
-from mythos.tools import Toolbox  # noqa: E402
-from mythos.ui import UI  # noqa: E402
-from mythos.workspace import Workspace  # noqa: E402
+from shibata_code.agent import Agent  # noqa: E402
+from shibata_code.backends.anthropic_backend import AnthropicBackend  # noqa: E402
+from shibata_code.config import build_config  # noqa: E402
+from shibata_code.session import Session  # noqa: E402
+from shibata_code.tools import Toolbox  # noqa: E402
+from shibata_code.ui import UI  # noqa: E402
+from shibata_code.workspace import Workspace  # noqa: E402
 
 
 def sse(event: str, payload: dict) -> str:
@@ -199,11 +200,11 @@ class SSEIntegrationTest(unittest.TestCase):
         )
         config = build_config(workspace=self.root, permission_mode="yolo")
         return Agent(
-            client=client,
             config=config,
             toolbox=Toolbox(Workspace(self.root)),
             session=Session(workspace=self.root),
             ui=self.ui,
+            backend=AnthropicBackend(config, client=client),
         )
 
     def test_テキスト応答がストリーミングで表示される(self) -> None:

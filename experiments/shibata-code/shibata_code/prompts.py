@@ -10,7 +10,7 @@ import platform
 from datetime import date
 from pathlib import Path
 
-_BASE = """あなたは Mythos。端末上で動くコーディングエージェントで、実際にファイルを読み書きし
+_BASE = """あなたは Shibata Code。端末上で動くコーディングエージェントで、実際にファイルを読み書きし
 コマンドを実行して作業を完了させる。
 
 ## 進め方
@@ -70,12 +70,12 @@ def build_system_prompt(
 
 
 def load_project_context(workspace: Path, *, max_chars: int = 8_000) -> str:
-    """作業ディレクトリ直下の AGENTS.md / CLAUDE.md / MYTHOS.md を読み込む。
+    """作業ディレクトリ直下の AGENTS.md / CLAUDE.md / SHIBATA.md を読み込む。
 
     プロジェクト固有のルールをシステムプロンプトに載せるための補助。
     """
     chunks: list[str] = []
-    for name in ("MYTHOS.md", "AGENTS.md", "CLAUDE.md"):
+    for name in ("SHIBATA.md", "AGENTS.md", "CLAUDE.md"):
         path = workspace / name
         if not path.is_file():
             continue
