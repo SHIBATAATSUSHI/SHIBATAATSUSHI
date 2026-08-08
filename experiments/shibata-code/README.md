@@ -86,6 +86,8 @@ python -m shibata_code --models
 | `--max-tokens` | 1リクエストの出力上限(既定 32000) |
 | `--thinking` | `summarized`(既定)で思考の要約を表示、`omitted` で非表示 |
 | `--reasoning-effort` | OpenAI 互換モデルにも `reasoning_effort` を送る |
+| `--compact` | 出力を絞る(携帯など細い画面向け) |
+| `--width` | 端末幅を明示する(自動検出の上書き) |
 | `--resume` | 最後に保存したセッションを再開 |
 
 環境変数 `SHIBATA_CODE_MODEL` / `SHIBATA_CODE_EFFORT` / `SHIBATA_CODE_MODE` /
@@ -107,6 +109,21 @@ python -m shibata_code --models
 /save              セッションを保存
 /exit              終了(Ctrl-D も同じ)
 ```
+
+## 携帯から使う
+
+iPhone / iPad から SSH で使う手順は **[MOBILE.md](MOBILE.md)** にまとめてある。
+エージェント本体は自宅PCで動かし、Tailscale 経由で繋ぎ、tmux で
+回線切断に備える構成。起動用のスクリプトと tmux 設定も
+`scripts/` に置いてある。
+
+```bash
+chmod +x scripts/sc-mobile.sh
+./scripts/sc-mobile.sh          # tmux に入って --compact で起動
+```
+
+`--compact` は思考の表示を省き、ツール結果を3行に絞り、端末の実際の幅に
+合わせて行を切る。細い画面で折り返しに埋もれるのを防ぐためのモード。
 
 ## 対応モデル
 
@@ -208,9 +225,10 @@ cd experiments/shibata-code
 python -m unittest discover -s tests
 ```
 
-175件。外部通信は一切しない。
+191件。外部通信は一切しない。
 
 - `test_workspace.py` / `test_tools.py` — パス境界と各ツール
+- `test_ui.py` — 細い画面での切り詰めと compact モード
 - `test_config_session.py` — モデル解決、プロバイダ、権限判定、履歴の保存
 - `test_backends.py` — 両バックエンドの変換と、ストリーミング集約
   (分割到着するツール引数、並列ツール呼び出し、壊れたJSON、互換エラー時の再試行)

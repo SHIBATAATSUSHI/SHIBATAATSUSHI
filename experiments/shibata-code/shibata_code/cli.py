@@ -97,14 +97,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--thinking",
-        default="summarized",
+        default=None,
         choices=THINKING_DISPLAYS,
-        help="思考の表示(既定: summarized)",
+        help="思考の表示(既定: summarized、--compact 時は omitted)",
     )
     parser.add_argument(
         "--reasoning-effort",
         action="store_true",
         help="OpenAI 互換モデルにも reasoning_effort を送る",
+    )
+    parser.add_argument(
+        "--compact",
+        action="store_true",
+        default=bool(os.environ.get("SHIBATA_CODE_COMPACT")),
+        help="出力を絞る(携帯など細い画面向け。思考を隠し、プレビューを短くする)",
+    )
+    parser.add_argument(
+        "--width", type=int, default=None, help="端末幅を明示する(自動検出の上書き)"
     )
     parser.add_argument(
         "--resume", action="store_true", help="最後に保存したセッションを再開する"
@@ -309,7 +318,7 @@ class Repl:
 def main(argv: list[str] | None = None) -> int:
     """エントリポイント。"""
     args = build_parser().parse_args(argv)
-    ui = UI(color=not args.no_color)
+    ui = UI(color=not args.no_color, width=args.width, compact=args.compact)
 
     if args.models:
         print_models(ui)
@@ -321,7 +330,8 @@ def main(argv: list[str] | None = None) -> int:
             workspace=args.workspace,
             effort=args.effort,
             max_tokens=args.max_tokens,
-            thinking_display=args.thinking,
+            # compact では思考を表示しないので、取り寄せないほうが安く済む
+            thinking_display=args.thinking or ("omitted" if args.compact else "summarized"),
             permission_mode=args.mode,
             color=not args.no_color,
             base_url=args.base_url,
