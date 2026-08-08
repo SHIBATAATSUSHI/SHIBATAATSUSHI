@@ -22,7 +22,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import anthropic  # noqa: E402
 
 from shibata_code.agent import Agent  # noqa: E402
-from shibata_code.backends.anthropic_backend import AnthropicBackend  # noqa: E402
+from shibata_code.backends.anthropic_backend import (  # noqa: E402
+    AnthropicBackend,
+    AnthropicHTTPBackend,
+)
 from shibata_code.config import build_config  # noqa: E402
 from shibata_code.session import Session  # noqa: E402
 from shibata_code.tools import Toolbox  # noqa: E402
@@ -260,6 +263,162 @@ class SSEIntegrationTest(unittest.TestCase):
         result = second["messages"][-1]["content"][0]
         self.assertTrue(result["is_error"])
         self.assertIn("存在しない", result["content"])
+
+
+def thinking_response(thought: str, answer: str) -> str:
+    """thinking ブロックを含むレスポンスの SSE 列。"""
+    return "".join(
+        [
+            sse(
+                "message_start",
+                {
+                    "type": "message_start",
+                    "message": {
+                        "id": "msg_think",
+                        "type": "message",
+                        "role": "assistant",
+                        "model": "claude-opus-5",
+                        "content": [],
+                        "stop_reason": None,
+                        "stop_sequence": None,
+                        "usage": {"input_tokens": 30, "output_tokens": 1},
+                    },
+                },
+            ),
+            sse(
+                "content_block_start",
+                {
+                    "type": "content_block_start",
+                    "index": 0,
+                    "content_block": {"type": "thinking", "thinking": "", "signature": ""},
+                },
+            ),
+            sse(
+                "content_block_delta",
+                {
+                    "type": "content_block_delta",
+                    "index": 0,
+                    "delta": {"type": "thinking_delta", "thinking": thought},
+                },
+            ),
+            sse(
+                "content_block_delta",
+                {
+                    "type": "content_block_delta",
+                    "index": 0,
+                    "delta": {"type": "signature_delta", "signature": "sig-abc"},
+                },
+            ),
+            sse("content_block_stop", {"type": "content_block_stop", "index": 0}),
+            sse(
+                "content_block_start",
+                {
+                    "type": "content_block_start",
+                    "index": 1,
+                    "content_block": {"type": "text", "text": ""},
+                },
+            ),
+            sse(
+                "content_block_delta",
+                {
+                    "type": "content_block_delta",
+                    "index": 1,
+                    "delta": {"type": "text_delta", "text": answer},
+                },
+            ),
+            sse("content_block_stop", {"type": "content_block_stop", "index": 1}),
+            sse(
+                "message_delta",
+                {
+                    "type": "message_delta",
+                    "delta": {"stop_reason": "end_turn", "stop_sequence": None},
+                    "usage": {"output_tokens": 12},
+                },
+            ),
+            sse("message_stop", {"type": "message_stop"}),
+        ]
+    )
+
+
+class AnthropicHTTPIntegrationTest(SSEIntegrationTest):
+    """SDK を使わない標準ライブラリ経路。iOS 等での動作に相当する。"""
+
+    def setUp(self) -> None:
+        super().setUp()
+        import os
+
+        self._had_key = os.environ.get("ANTHROPIC_API_KEY")
+        os.environ["ANTHROPIC_API_KEY"] = "test-key"
+
+    def tearDown(self) -> None:
+        import os
+
+        if self._had_key is None:
+            os.environ.pop("ANTHROPIC_API_KEY", None)
+        else:
+            os.environ["ANTHROPIC_API_KEY"] = self._had_key
+        super().tearDown()
+
+    def make_agent(self) -> Agent:
+        # base_url にモックサーバを向け、SDK を通さず urllib で喋らせる
+        config = build_config(
+            workspace=self.root,
+            permission_mode="yolo",
+            base_url=self.base_url,
+            transport="http",
+        )
+        return Agent(
+            config=config,
+            toolbox=Toolbox(Workspace(self.root)),
+            session=Session(workspace=self.root),
+            ui=self.ui,
+            backend=AnthropicHTTPBackend(config, trust_env=False),
+        )
+
+    def test_送信リクエストの形が期待どおり(self) -> None:
+        # 親クラスの検査に加えて、stream が立っていることを確かめる
+        _Handler.responses = [text_response("はい")]
+        agent = self.make_agent()
+        agent.run_turn("やあ")
+        sent = _Handler.received[0]
+        self.assertTrue(sent["stream"])
+        self.assertEqual(sent["model"], "claude-opus-5")
+        self.assertEqual(sent["thinking"], {"type": "adaptive", "display": "summarized"})
+        self.assertEqual(len(sent["tools"]), 6)
+
+    def test_思考ブロックを署名ごと保持する(self) -> None:
+        # 次のリクエストへそのまま送り返せる形で持っている必要がある
+        _Handler.responses = [thinking_response("考えた", "答えだ")]
+        agent = self.make_agent()
+        agent.run_turn("考えて")
+
+        assistant = agent.session.messages[-1]
+        blocks = assistant.native
+        self.assertEqual(blocks[0]["type"], "thinking")
+        self.assertEqual(blocks[0]["thinking"], "考えた")
+        self.assertEqual(blocks[0]["signature"], "sig-abc")
+        self.assertEqual(assistant.text, "答えだ")
+
+    def test_思考ブロックを次のリクエストで送り返す(self) -> None:
+        _Handler.responses = [
+            thinking_response("考えた", "答えだ"),
+            text_response("続き"),
+        ]
+        agent = self.make_agent()
+        agent.run_turn("考えて")
+        agent.run_turn("もっと")
+
+        second = _Handler.received[1]
+        assistant = [m for m in second["messages"] if m["role"] == "assistant"][0]
+        self.assertEqual(assistant["content"][0]["type"], "thinking")
+        self.assertEqual(assistant["content"][0]["signature"], "sig-abc")
+
+    def test_APIキーが無ければ案内する(self) -> None:
+        import os
+
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+        agent = self.make_agent()
+        self.assertIn("ANTHROPIC_API_KEY", agent.check_credentials())
 
 
 if __name__ == "__main__":

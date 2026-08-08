@@ -86,6 +86,7 @@ python -m shibata_code --models
 | `--max-tokens` | 1リクエストの出力上限(既定 32000) |
 | `--thinking` | `summarized`(既定)で思考の要約を表示、`omitted` で非表示 |
 | `--reasoning-effort` | OpenAI 互換モデルにも `reasoning_effort` を送る |
+| `--transport` | `auto`(既定) / `sdk` / `http`。`http` は SDK 不要 |
 | `--compact` | 出力を絞る(携帯など細い画面向け) |
 | `--width` | 端末幅を明示する(自動検出の上書き) |
 | `--resume` | 最後に保存したセッションを再開 |
@@ -112,9 +113,18 @@ python -m shibata_code --models
 
 ## 携帯から使う
 
-iPhone / iPad から SSH で使う手順は **[MOBILE.md](MOBILE.md)** にまとめてある。
-エージェント本体は自宅PCで動かし、Tailscale 経由で繋ぎ、tmux で
-回線切断に備える構成。起動用のスクリプトと tmux 設定も
+2通りある。
+
+**PCを挟む(推奨)** — 手順は **[MOBILE.md](MOBILE.md)**。
+全機能が使えて速い。
+
+**iPhone だけで完結** — 手順は **[IPHONE.md](IPHONE.md)**。
+追加パッケージ不要(`--transport http` で標準ライブラリだけで通信する)。
+ただし a-Shell ではシェルを起動できないため `bash` ツールが使えず、
+テスト実行や git 操作はできない。
+
+推奨構成は、エージェント本体を自宅PCで動かし、Tailscale 経由で繋ぎ、
+tmux で回線切断に備えるもの。起動用のスクリプトと tmux 設定も
 `scripts/` に置いてある。
 
 ```bash
@@ -164,9 +174,10 @@ shibata_code/
   cli.py          CLI と対話ループ
   agent.py        エージェントループ(プロバイダ非依存)
   backends/       プロバイダごとの送受信
-    base.py         共通インターフェースと正規化した停止理由
-    anthropic_backend.py
-    openai_backend.py
+    base.py            共通インターフェースと正規化した停止理由
+    anthropic_backend.py  SDK版 + 標準ライブラリ版
+    openai_backend.py     SDK版 + 標準ライブラリ版
+    http_transport.py     urllib だけで喋る HTTP + SSE
   providers.py    接続先と環境変数の定義
   config.py       モデルの素性と実行設定
   messages.py     プロバイダ非依存の会話履歴表現
@@ -225,10 +236,12 @@ cd experiments/shibata-code
 python -m unittest discover -s tests
 ```
 
-191件。外部通信は一切しない。
+214件。外部通信は一切しない。
 
 - `test_workspace.py` / `test_tools.py` — パス境界と各ツール
 - `test_ui.py` — 細い画面での切り詰めと compact モード
+- `test_no_sdk.py` — SDK の import を遮断した状態で1往復させ、
+  追加パッケージ無しで動くことを確かめる(iOS 相当の検証)
 - `test_config_session.py` — モデル解決、プロバイダ、権限判定、履歴の保存
 - `test_backends.py` — 両バックエンドの変換と、ストリーミング集約
   (分割到着するツール引数、並列ツール呼び出し、壊れたJSON、互換エラー時の再試行)
@@ -245,6 +258,8 @@ python -m unittest discover -s tests
 - サブエージェント、MCP、Web検索には対応していない
 - `.gitignore` は見ておらず、除外は `IGNORED_DIRS` の固定リスト
 - 実APIへの疎通確認はしていない(この環境に認証情報が無いため)。
-  SDK 経路は両方ともモックサーバで検証済み
+  SDK 経路・標準ライブラリ経路とも、モックサーバで検証済み
+- iOS 上での実機確認はしていない(手元にiPhoneが無いため)。
+  SDK 無しで動くことはテストで確認済みだが、a-Shell 固有の挙動は未確認
 - 他社モデルの価格は未設定。コスト概算は Anthropic のみ
 - プリセットのモデルIDは古くなる。`プロバイダ:モデルID` での指定が確実

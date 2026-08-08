@@ -114,9 +114,19 @@ def _iter_files(root: Path) -> list[Path]:
 class Toolbox:
     """ツールの登録・スキーマ提供・実行を担う。"""
 
-    def __init__(self, workspace: Workspace, *, bash_timeout: int = 120) -> None:
+    def __init__(
+        self,
+        workspace: Workspace,
+        *,
+        bash_timeout: int = 120,
+        enable_bash: bool | None = None,
+    ) -> None:
         self.workspace = workspace
         self.bash_timeout = bash_timeout
+        # iOS の a-Shell のようにシェルを起動できない環境がある。
+        # 使えないツールを見せるとモデルが無駄に試すので、登録しない。
+        self.shell = shutil.which("bash") or shutil.which("sh")
+        self.bash_enabled = self.shell is not None if enable_bash is None else enable_bash
         # read したファイルの更新時刻を覚えておき、編集時の陳腐化を検出する。
         self._read_state: dict[Path, float] = {}
         self._specs: dict[str, ToolSpec] = {}
@@ -310,6 +320,10 @@ class Toolbox:
                 summarize=lambda p: str(p.get("pattern", "")),
             )
         )
+
+        if not self.bash_enabled:
+            # シェルが無い環境では bash を登録せずに終える。
+            return
 
         self._register(
             ToolSpec(
@@ -599,10 +613,13 @@ class Toolbox:
         timeout = int(payload.get("timeout") or self.bash_timeout)
         timeout = max(1, min(timeout, 900))
 
+        if not self.shell:
+            raise ToolError("この環境ではシェルを起動できない")
+
         started = time.monotonic()
         try:
             completed = subprocess.run(
-                ["bash", "-c", command],
+                [self.shell, "-c", command],
                 cwd=str(self.workspace.root),
                 capture_output=True,
                 text=True,

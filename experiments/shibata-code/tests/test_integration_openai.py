@@ -22,7 +22,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import openai  # noqa: E402
 
 from shibata_code.agent import Agent  # noqa: E402
-from shibata_code.backends.openai_backend import OpenAICompatBackend  # noqa: E402
+from shibata_code.backends.openai_backend import (  # noqa: E402
+    OpenAICompatBackend,
+    OpenAICompatHTTPBackend,
+)
 from shibata_code.config import build_config  # noqa: E402
 from shibata_code.session import Session  # noqa: E402
 from shibata_code.tools import Toolbox  # noqa: E402
@@ -224,6 +227,56 @@ class OpenAIIntegrationTest(unittest.TestCase):
         self.assertEqual(roles, ["system", "assistant", "user"])
         # Anthropic 固有の thinking は送られていない
         self.assertNotIn("thinking", json.dumps(sent, ensure_ascii=False))
+
+
+class OpenAIHTTPIntegrationTest(OpenAIIntegrationTest):
+    """SDK を使わない標準ライブラリ経路。iOS 等での動作に相当する。"""
+
+    def setUp(self) -> None:
+        super().setUp()
+        import os
+
+        self._had_key = os.environ.get("DEEPSEEK_API_KEY")
+        os.environ["DEEPSEEK_API_KEY"] = "test-key"
+
+    def tearDown(self) -> None:
+        import os
+
+        if self._had_key is None:
+            os.environ.pop("DEEPSEEK_API_KEY", None)
+        else:
+            os.environ["DEEPSEEK_API_KEY"] = self._had_key
+        super().tearDown()
+
+    def make_agent(self, model: str = "deepseek") -> Agent:
+        config = build_config(
+            model=model,
+            workspace=self.root,
+            permission_mode="yolo",
+            base_url=self.base_url,
+            transport="http",
+        )
+        return Agent(
+            config=config,
+            toolbox=Toolbox(Workspace(self.root)),
+            session=Session(workspace=self.root),
+            ui=self.ui,
+            backend=OpenAICompatHTTPBackend(config, trust_env=False),
+        )
+
+    def test_認証ヘッダを付けて送る(self) -> None:
+        _Handler.responses = [text_response("はい")]
+        agent = self.make_agent()
+        agent.run_turn("やあ")
+        # ヘッダは受信側で記録していないので、例外なく通ったことを確認する
+        self.assertEqual(len(_Handler.received), 1)
+
+    def test_APIキーが無ければ案内する(self) -> None:
+        import os
+
+        os.environ.pop("DEEPSEEK_API_KEY", None)
+        agent = self.make_agent()
+        self.assertIn("DEEPSEEK_API_KEY", agent.check_credentials())
 
 
 if __name__ == "__main__":

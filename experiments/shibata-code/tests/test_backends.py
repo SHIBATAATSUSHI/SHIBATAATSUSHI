@@ -36,19 +36,30 @@ from shibata_code.workspace import Workspace  # noqa: E402
 # OpenAI SDK のストリーミングを模したフェイク
 # ----------------------------------------------------------------------
 def delta_chunk(*, content=None, reasoning=None, tool_calls=None, finish=None, usage=None):
-    delta = SimpleNamespace(
-        content=content, reasoning_content=reasoning, tool_calls=tool_calls
-    )
-    choice = SimpleNamespace(delta=delta, finish_reason=finish)
-    return SimpleNamespace(choices=[choice], usage=usage)
+    """SDK が model_dump() で吐くのと同じ形(辞書)のチャンク。"""
+    delta: dict = {}
+    if content is not None:
+        delta["content"] = content
+    if reasoning is not None:
+        delta["reasoning_content"] = reasoning
+    if tool_calls is not None:
+        delta["tool_calls"] = tool_calls
+    chunk: dict = {"choices": [{"delta": delta, "finish_reason": finish}]}
+    if usage is not None:
+        chunk["usage"] = usage
+    return chunk
 
 
-def tool_fragment(index: int, *, call_id=None, name=None, arguments=None):
-    return SimpleNamespace(
-        index=index,
-        id=call_id,
-        function=SimpleNamespace(name=name, arguments=arguments),
-    )
+def tool_fragment(index: int, *, call_id=None, name=None, arguments=None) -> dict:
+    function: dict = {}
+    if name is not None:
+        function["name"] = name
+    if arguments is not None:
+        function["arguments"] = arguments
+    fragment: dict = {"index": index, "function": function}
+    if call_id is not None:
+        fragment["id"] = call_id
+    return fragment
 
 
 class FakeCompletions:
@@ -351,11 +362,11 @@ class OpenAIStreamTest(BackendTestBase):
         self.assertIn("考え中", buffer.getvalue())
 
     def test_利用量を拾う(self) -> None:
-        usage = SimpleNamespace(
-            prompt_tokens=120,
-            completion_tokens=30,
-            prompt_tokens_details=SimpleNamespace(cached_tokens=100),
-        )
+        usage = {
+            "prompt_tokens": 120,
+            "completion_tokens": 30,
+            "prompt_tokens_details": {"cached_tokens": 100},
+        }
         result, _ = self.run_stream(
             [delta_chunk(content="x", finish="stop"), delta_chunk(usage=usage)]
         )

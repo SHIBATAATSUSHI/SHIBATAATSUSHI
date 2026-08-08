@@ -20,6 +20,10 @@ PERMISSION_MODES = ("ask", "auto", "yolo")
 THINKING_DISPLAYS = ("summarized", "omitted")
 EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
 
+# 通信経路。auto は SDK があればそれを、無ければ標準ライブラリ版を使う。
+# http を選ぶと SDK を入れずに動く(iOS 等で必要)。
+TRANSPORTS = ("auto", "sdk", "http")
+
 # OpenAI 系の reasoning_effort が受け付ける段階。Anthropic の effort より粗い。
 OPENAI_EFFORTS = {"low": "low", "medium": "medium", "high": "high", "xhigh": "high", "max": "high"}
 
@@ -275,6 +279,8 @@ class Config:
     base_url: str | None = None
     # OpenAI 系で reasoning_effort を強制的に送るか
     force_reasoning_effort: bool = False
+    # 通信経路(auto / sdk / http)
+    transport: str = "auto"
 
     @property
     def provider(self) -> ProviderSpec:
@@ -311,9 +317,13 @@ def build_config(
     color: bool | None = None,
     base_url: str | None = None,
     force_reasoning_effort: bool = False,
+    transport: str = "auto",
 ) -> Config:
     """CLI 引数から `Config` を組み立てる。"""
     spec = resolve_model(model)
+
+    if transport not in TRANSPORTS:
+        raise ValueError(f"transport は {'/'.join(TRANSPORTS)} のいずれか: {transport}")
 
     if effort not in EFFORT_LEVELS:
         raise ValueError(f"effort は {'/'.join(EFFORT_LEVELS)} のいずれか: {effort}")
@@ -341,4 +351,5 @@ def build_config(
         color=color,
         base_url=base_url or os.environ.get("SHIBATA_CODE_BASE_URL"),
         force_reasoning_effort=force_reasoning_effort,
+        transport=transport,
     )

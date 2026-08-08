@@ -198,6 +198,25 @@ class ToolboxTest(unittest.TestCase):
         self.assertIn("タイムアウト", str(ctx.exception))
 
     # -- 共通 -----------------------------------------------------------
+    def test_シェルが無い環境ではbashを登録しない(self) -> None:
+        # iOS の a-Shell などシェルを起動できない環境を想定。
+        # 使えないツールを見せるとモデルが無駄に試すので出さない。
+        limited = Toolbox(Workspace(self.root), enable_bash=False)
+        names = {schema["name"] for schema in limited.api_schemas()}
+        self.assertNotIn("bash", names)
+        self.assertEqual(names, {"read", "write", "edit", "glob", "grep"})
+        with self.assertRaises(ToolError):
+            limited.run("bash", {"command": "echo x"})
+
+    def test_bash以外はシェル無しでも使える(self) -> None:
+        limited = Toolbox(Workspace(self.root), enable_bash=False)
+        limited.run("write", {"path": "a.txt", "content": "本文"})
+        self.assertIn("本文", limited.run("read", {"path": "a.txt"}))
+
+    def test_シェルを検出している(self) -> None:
+        self.assertIsNotNone(self.tools.shell)
+        self.assertTrue(self.tools.bash_enabled)
+
     def test_未知のツールはToolError(self) -> None:
         with self.assertRaises(ToolError):
             self.tools.run("存在しない", {})

@@ -18,6 +18,7 @@ from .config import (
     MODEL_PRESETS,
     PERMISSION_MODES,
     THINKING_DISPLAYS,
+    TRANSPORTS,
     Config,
     build_config,
 )
@@ -105,6 +106,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--reasoning-effort",
         action="store_true",
         help="OpenAI 互換モデルにも reasoning_effort を送る",
+    )
+    parser.add_argument(
+        "--transport",
+        default=os.environ.get("SHIBATA_CODE_TRANSPORT", "auto"),
+        choices=TRANSPORTS,
+        help=(
+            "通信経路。auto(既定)は SDK があればそれを使う。"
+            "http は SDK 不要で標準ライブラリだけで動く(iOS 等)"
+        ),
     )
     parser.add_argument(
         "--compact",
@@ -336,6 +346,7 @@ def main(argv: list[str] | None = None) -> int:
             color=not args.no_color,
             base_url=args.base_url,
             force_reasoning_effort=args.reasoning_effort,
+            transport=args.transport,
         )
     except ValueError as exc:
         ui.error(str(exc))

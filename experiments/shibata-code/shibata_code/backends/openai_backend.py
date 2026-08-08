@@ -16,6 +16,7 @@ from typing import Any
 
 from ..config import OPENAI_EFFORTS
 from ..messages import Message, ToolCall, parse_arguments
+from .http_transport import HTTPTransportError, post_sse
 from .base import (
     STOP_END_TURN,
     STOP_MAX_TOKENS,
@@ -208,7 +209,18 @@ class OpenAICompatBackend(Backend):
     def _consume_stream(
         self, params: dict[str, Any], tools: list[Any], sink: StreamSink
     ) -> TurnResult:
-        """ストリーミングを消費して結果を組み立てる。"""
+        """SDK のストリーミングを消費して結果を組み立てる。
+
+        チャンクを辞書へ均してから積み上げる。標準ライブラリ経由でも
+        同じ組み立てを使い回すため。
+        """
+        stream = self.client.chat.completions.create(**params)
+        return self.accumulate((_as_dict(chunk) for chunk in stream), tools, sink)
+
+    def accumulate(
+        self, chunks: Any, tools: list[Any], sink: StreamSink
+    ) -> TurnResult:
+        """チャンク(辞書)の並びから結果を組み立てる。"""
         texts: list[str] = []
         # index ごとにツール呼び出しの断片を溜める
         slots: dict[int, dict[str, str]] = {}
@@ -217,40 +229,37 @@ class OpenAICompatBackend(Backend):
         thinking_started = False
         text_started = False
 
-        stream = self.client.chat.completions.create(**params)
-        for chunk in stream:
-            chunk_usage = getattr(chunk, "usage", None)
-            if chunk_usage is not None:
+        for chunk in chunks:
+            chunk_usage = chunk.get("usage")
+            if chunk_usage:
                 usage = {
-                    "input_tokens": getattr(chunk_usage, "prompt_tokens", 0) or 0,
-                    "output_tokens": getattr(chunk_usage, "completion_tokens", 0) or 0,
+                    "input_tokens": chunk_usage.get("prompt_tokens", 0) or 0,
+                    "output_tokens": chunk_usage.get("completion_tokens", 0) or 0,
                     "cache_creation_tokens": 0,
                     "cache_read_tokens": _cached_tokens(chunk_usage),
                 }
 
-            choices = getattr(chunk, "choices", None) or []
+            choices = chunk.get("choices") or []
             if not choices:
                 continue
-            choice = choices[0]
+            choice = choices[0] or {}
 
-            if getattr(choice, "finish_reason", None):
-                finish_reason = choice.finish_reason
+            if choice.get("finish_reason"):
+                finish_reason = choice["finish_reason"]
 
-            delta = getattr(choice, "delta", None)
-            if delta is None:
+            delta = choice.get("delta")
+            if not delta:
                 continue
 
             # 推論内容を返すモデル(DeepSeek Reasoner 等)は別フィールドで来る。
-            reasoning = getattr(delta, "reasoning_content", None) or getattr(
-                delta, "reasoning", None
-            )
+            reasoning = delta.get("reasoning_content") or delta.get("reasoning")
             if reasoning:
                 if not thinking_started:
                     thinking_started = True
                     sink.thinking_header()
                 sink.thinking_chunk(str(reasoning))
 
-            content = getattr(delta, "content", None)
+            content = delta.get("content")
             if content:
                 if not text_started:
                     text_started = True
@@ -258,18 +267,16 @@ class OpenAICompatBackend(Backend):
                 texts.append(content)
                 sink.assistant_chunk(content)
 
-            for fragment in getattr(delta, "tool_calls", None) or []:
-                index = getattr(fragment, "index", 0) or 0
+            for fragment in delta.get("tool_calls") or []:
+                index = fragment.get("index", 0) or 0
                 slot = slots.setdefault(index, {"id": "", "name": "", "arguments": ""})
-                if getattr(fragment, "id", None):
-                    slot["id"] = fragment.id
-                function = getattr(fragment, "function", None)
-                if function is None:
-                    continue
-                if getattr(function, "name", None):
-                    slot["name"] += function.name
-                if getattr(function, "arguments", None):
-                    slot["arguments"] += function.arguments
+                if fragment.get("id"):
+                    slot["id"] = fragment["id"]
+                function = fragment.get("function") or {}
+                if function.get("name"):
+                    slot["name"] += function["name"]
+                if function.get("arguments"):
+                    slot["arguments"] += function["arguments"]
 
         sink.ensure_newline()
 
@@ -314,13 +321,98 @@ class OpenAICompatBackend(Backend):
         return f"{label} エラー {status}: {body}" + (f" — {hint}" if hint else "")
 
 
-def _cached_tokens(usage: Any) -> int:
+class OpenAICompatHTTPBackend(OpenAICompatBackend):
+    """openai SDK を使わず、標準ライブラリだけで喋る版。
+
+    iOS など SDK を入れられない環境向け。組み立てと解釈は SDK 版と
+    共通で、通信部分だけ差し替えている。
+    """
+
+    name = "openai_compat_http"
+
+    def __init__(self, config, *, trust_env: bool = True) -> None:
+        super().__init__(config, client=None)
+        self.trust_env = trust_env
+
+    def _endpoint(self) -> str:
+        base = (self.config.resolved_base_url() or "").rstrip("/")
+        if not base:
+            raise BackendError("接続先が分からない。--base-url を指定すること")
+        return f"{base}/chat/completions"
+
+    def _headers(self) -> dict[str, str]:
+        provider = self.config.provider
+        api_key = provider.find_api_key()
+        if not api_key and provider.key == "local":
+            api_key = "not-needed"
+        if not api_key:
+            raise BackendError(
+                f"{provider.label} のAPIキーが無い。{provider.env_hint()} を設定すること"
+            )
+        return {"Authorization": f"Bearer {api_key}"}
+
+    def stream_turn(
+        self,
+        *,
+        system: str,
+        history: list[Message],
+        tools: list[Any],
+        sink: StreamSink,
+    ) -> TurnResult:
+        params = self.build_params(system=system, history=history, tools=tools)
+        url = self._endpoint()
+        headers = self._headers()
+
+        attempt = dict(params)
+        droppable = [name for name in _OPTIONAL_PARAMS if name in attempt]
+
+        while True:
+            try:
+                events = post_sse(
+                    url, headers=headers, payload=attempt, trust_env=self.trust_env
+                )
+                return self.accumulate(events, tools, sink)
+            except HTTPTransportError as exc:
+                # 互換性の穴で弾かれた場合だけ、任意パラメータを外して再試行する
+                if exc.status == 400 and droppable:
+                    attempt.pop(droppable.pop(0), None)
+                    sink.ensure_newline()
+                    continue
+                raise BackendError(self._describe_http_error(exc)) from exc
+
+    def _describe_http_error(self, exc: HTTPTransportError) -> str:
+        label = self.config.provider.label
+        hints = {
+            400: "リクエストが不正。そのモデルが対応していないパラメータかもしれない",
+            401: f"APIキーが無効。{self.config.provider.env_hint()} を確認すること",
+            403: "このAPIキーではこのモデルを使えない",
+            404: "モデルIDが見つからない。プロバイダのモデル一覧を確認すること",
+            429: "レート制限に達した。少し待って再試行すること",
+        }
+        hint = hints.get(exc.status or 0, "")
+        if exc.status and exc.status >= 500:
+            hint = "サーバ側の問題。少し待って再試行すること"
+        head = f"{label} エラー {exc.status}: " if exc.status else f"{label}: "
+        return head + str(exc) + (f" — {hint}" if hint else "")
+
+
+def _as_dict(chunk: Any) -> dict[str, Any]:
+    """SDK のチャンクを辞書に均す。すでに辞書ならそのまま。"""
+    if isinstance(chunk, dict):
+        return chunk
+    dump = getattr(chunk, "model_dump", None)
+    if callable(dump):
+        return dump()
+    return {}
+
+
+def _cached_tokens(usage: dict[str, Any]) -> int:
     """プロンプトキャッシュのヒット数を拾う(取れないプロバイダは 0)。"""
-    details = getattr(usage, "prompt_tokens_details", None)
-    if details is not None:
-        return getattr(details, "cached_tokens", 0) or 0
+    details = usage.get("prompt_tokens_details")
+    if isinstance(details, dict):
+        return details.get("cached_tokens", 0) or 0
     # DeepSeek は独自の欄で返す
-    return getattr(usage, "prompt_cache_hit_tokens", 0) or 0
+    return usage.get("prompt_cache_hit_tokens", 0) or 0
 
 
 def _repair_name(name: str, known: set[str]) -> str:
