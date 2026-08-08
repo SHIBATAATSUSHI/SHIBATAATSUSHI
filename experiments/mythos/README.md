@@ -1,9 +1,14 @@
-# Mytos
+# Mythos
 
 端末で動くミニ・コーディングエージェント。Claude Code のようなものを、
 中身が読み切れる分量で自作したもの。Anthropic Messages API のツール利用
 ループを最小構成で組んであり、ファイルの読み書き・検索・シェル実行を
 権限確認を挟みながら実行する。
+
+> **名前について。** このツールの `mythos` は、Anthropic のモデル
+> `claude-mythos-5`(短縮名 `mythos`)と同じ綴りになる。コマンドとしての
+> `mythos` と、モデル指定の `-m mythos` を読み分けること。
+> 例えば `python -m mythos -m mythos` は「Mythos を Claude Mythos 5 で動かす」。
 
 ## できること
 
@@ -17,31 +22,31 @@
 ## セットアップ
 
 ```bash
-cd experiments/mytos
+cd experiments/mythos
 pip install -r requirements.txt
 export ANTHROPIC_API_KEY=sk-ant-...   # または `ant auth login`
 ```
 
-`pip install -e .` すると `mytos` コマンドとして入る。入れずに
-`python -m mytos` でもそのまま動く。
+`pip install -e .` すると `mythos` コマンドとして入る。入れずに
+`python -m mythos` でもそのまま動く。
 
 ## 使い方
 
 ```bash
 # 対話モード(カレントディレクトリが作業対象)
-python -m mytos
+python -m mythos
 
 # 1回だけ実行して終了
-python -m mytos -p "tests/ 以下のテストを実行して、落ちているものを直して"
+python -m mythos -p "tests/ 以下のテストを実行して、落ちているものを直して"
 
 # 別ディレクトリを対象にする / モデルと深さを変える
-python -m mytos -C ~/work/myapp -m sonnet -e medium
+python -m mythos -C ~/work/myapp -m sonnet -e medium
 
 # 標準入力から指示を渡す
-git diff | python -m mytos -p "この差分をレビューして"
+git diff | python -m mythos -p "この差分をレビューして"
 
 # 前回の続きから
-python -m mytos --resume
+python -m mythos --resume
 ```
 
 ### 主なオプション
@@ -56,7 +61,7 @@ python -m mytos --resume
 | `--thinking` | `summarized`(既定)で思考の要約を表示、`omitted` で非表示 |
 | `--resume` | 最後に保存したセッションを再開 |
 
-環境変数 `MYTOS_MODEL` / `MYTOS_EFFORT` / `MYTOS_MODE` で既定値を変えられる。
+環境変数 `MYTHOS_MODEL` / `MYTHOS_EFFORT` / `MYTHOS_MODE` で既定値を変えられる。
 
 ### 対話中のコマンド
 
@@ -130,7 +135,7 @@ python -m mytos --resume
 ## テスト
 
 ```bash
-cd experiments/mytos
+cd experiments/mythos
 python -m unittest discover -s tests
 ```
 

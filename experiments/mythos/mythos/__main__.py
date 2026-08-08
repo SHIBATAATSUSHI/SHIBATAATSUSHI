@@ -1,4 +1,4 @@
-"""`python -m mytos` で起動するためのエントリポイント。"""
+"""`python -m mythos` で起動するためのエントリポイント。"""
 
 from __future__ import annotations
 

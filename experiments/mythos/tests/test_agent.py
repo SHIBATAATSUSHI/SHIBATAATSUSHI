@@ -16,12 +16,12 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from mytos.agent import Agent, AgentError  # noqa: E402
-from mytos.config import build_config  # noqa: E402
-from mytos.session import Session  # noqa: E402
-from mytos.tools import Toolbox  # noqa: E402
-from mytos.ui import UI  # noqa: E402
-from mytos.workspace import Workspace  # noqa: E402
+from mythos.agent import Agent, AgentError  # noqa: E402
+from mythos.config import build_config  # noqa: E402
+from mythos.session import Session  # noqa: E402
+from mythos.tools import Toolbox  # noqa: E402
+from mythos.ui import UI  # noqa: E402
+from mythos.workspace import Workspace  # noqa: E402
 
 
 def text_block(text: str) -> SimpleNamespace:

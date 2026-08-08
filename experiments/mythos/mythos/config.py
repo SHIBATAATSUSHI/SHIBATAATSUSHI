@@ -1,4 +1,4 @@
-"""Mytos の設定とモデルプリセット。
+"""Mythos の設定とモデルプリセット。
 
 モデルごとに使えるAPIパラメータが違う(adaptive thinking / effort / サーバ側
 フォールバック)ため、モデルの素性を `ModelSpec` にまとめて持っておき、

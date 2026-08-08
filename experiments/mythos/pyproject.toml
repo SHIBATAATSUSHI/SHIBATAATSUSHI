@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mytos"
+name = "mythos"
 version = "0.1.0"
 description = "端末で動くミニ・コーディングエージェント"
 readme = "README.md"
@@ -11,7 +11,7 @@ requires-python = ">=3.11"
 dependencies = ["anthropic>=0.121.0"]
 
 [project.scripts]
-mytos = "mytos.cli:main"
+mythos = "mythos.cli:main"
 
 [tool.setuptools]
-packages = ["mytos"]
+packages = ["mythos"]

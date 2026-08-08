@@ -1,4 +1,4 @@
-"""Mytos のコマンドラインインターフェース。
+"""Mythos のコマンドラインインターフェース。
 
 対話モード(REPL)と、1発実行の `--print` モードを提供する。
 """
@@ -36,7 +36,7 @@ HELP_TEXT = """\
   /tools             利用できるツールの一覧
   /cost              このセッションのトークン利用量と概算コスト
   /clear             会話履歴を消す(設定と利用量は残る)
-  /save              セッションを .mytos/sessions/ に保存
+  /save              セッションを .mythos/sessions/ に保存
   /exit              終了 (Ctrl-D でも同じ)
 
 そのほかの入力はすべてエージェントへの指示として扱う。"""
@@ -45,7 +45,7 @@ HELP_TEXT = """\
 def build_parser() -> argparse.ArgumentParser:
     """コマンドライン引数の定義。"""
     parser = argparse.ArgumentParser(
-        prog="mytos",
+        prog="mythos",
         description="端末で動くミニ・コーディングエージェント",
     )
     parser.add_argument(
@@ -63,7 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-m",
         "--model",
-        default=os.environ.get("MYTOS_MODEL"),
+        default=os.environ.get("MYTHOS_MODEL"),
         help=f"モデル。短縮名: {', '.join(MODEL_PRESETS)}(既定: opus)",
     )
     parser.add_argument(
@@ -75,13 +75,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-e",
         "--effort",
-        default=os.environ.get("MYTOS_EFFORT", "high"),
+        default=os.environ.get("MYTHOS_EFFORT", "high"),
         choices=EFFORT_LEVELS,
         help="思考と作業の深さ(既定: high)",
     )
     parser.add_argument(
         "--mode",
-        default=os.environ.get("MYTOS_MODE", "ask"),
+        default=os.environ.get("MYTHOS_MODE", "ask"),
         choices=PERMISSION_MODES,
         help="権限モード(既定: ask)",
     )
@@ -103,14 +103,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="この作業ディレクトリで最後に保存したセッションを再開する",
     )
     parser.add_argument("--no-color", action="store_true", help="色を使わない")
-    parser.add_argument("--version", action="version", version=f"mytos {__version__}")
+    parser.add_argument("--version", action="version", version=f"mythos {__version__}")
     return parser
 
 
 def compose_prompt(prompt_args: list[str], piped: str) -> str:
     """引数で渡された指示と、標準入力の内容を1つの依頼にまとめる。
 
-    `git diff | mytos -p "この差分をレビューして"` のように、
+    `git diff | mythos -p "この差分をレビューして"` のように、
     指示と対象データを別々の経路で受け取れるようにするため。
     """
     instruction = " ".join(prompt_args).strip()
@@ -157,7 +157,7 @@ class Repl:
         """対話ループを回す。終了コードを返す。"""
         cfg = self.config
         self.ui.banner(
-            "Mytos",
+            "Mythos",
             f"{cfg.model.label} / effort={cfg.effort} / {cfg.permission_mode} モード"
             f" / {cfg.workspace}",
         )

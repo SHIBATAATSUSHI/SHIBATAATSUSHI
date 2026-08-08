@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-SESSION_DIR_NAME = ".mytos"
+SESSION_DIR_NAME = ".mythos"
 
 
 def _to_jsonable(value: Any) -> Any:

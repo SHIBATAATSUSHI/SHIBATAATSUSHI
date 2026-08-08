@@ -9,10 +9,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from mytos.config import MODEL_PRESETS, build_config, resolve_model  # noqa: E402
-from mytos.permissions import PermissionGate, classify_command  # noqa: E402
-from mytos.prompts import build_system_prompt, load_project_context  # noqa: E402
-from mytos.session import Session, Usage  # noqa: E402
+from mythos.config import MODEL_PRESETS, build_config, resolve_model  # noqa: E402
+from mythos.permissions import PermissionGate, classify_command  # noqa: E402
+from mythos.prompts import build_system_prompt, load_project_context  # noqa: E402
+from mythos.session import Session, Usage  # noqa: E402
 
 
 class ConfigTest(unittest.TestCase):
@@ -170,7 +170,7 @@ class PromptTest(unittest.TestCase):
     def test_システムプロンプトに実行環境が入る(self) -> None:
         prompt = build_system_prompt(self.root)
         self.assertIn(str(self.root), prompt)
-        self.assertIn("Mytos", prompt)
+        self.assertIn("Mythos", prompt)
 
     def test_プロジェクト指示を読み込む(self) -> None:
         (self.root / "CLAUDE.md").write_text("# 規約\n日本語で書く", encoding="utf-8")
