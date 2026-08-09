@@ -124,8 +124,17 @@ python -m shibata_code --models
 テスト実行や git 操作はできない。
 
 推奨構成は、エージェント本体を自宅PCで動かし、Tailscale 経由で繋ぎ、
-tmux で回線切断に備えるもの。起動用のスクリプトと tmux 設定も
-`scripts/` に置いてある。
+tmux で回線切断に備えるもの。**手元にPCが無い場合は、クラウドに小さな
+Linux を1台借りれば同じことができる**(月500〜1,100円程度。契約から
+セットアップまで iPhone だけで完結する)。
+
+```bash
+# VPSにSSHで入ってから、この2行だけ
+git clone <このリポジトリ> ~/repo
+bash ~/repo/experiments/shibata-code/scripts/setup-vps.sh
+```
+
+起動用のスクリプトと tmux 設定も `scripts/` に置いてある。
 
 ```bash
 chmod +x scripts/sc-mobile.sh
