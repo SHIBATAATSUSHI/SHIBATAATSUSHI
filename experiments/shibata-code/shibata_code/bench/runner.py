@@ -80,6 +80,8 @@ class TaskOutcome:
     tool_calls: int = 0
     answer: str = ""
     error: str = ""
+    # 続けても同じ結果にしかならないエラーか(認証・権限)
+    fatal: bool = False
 
     @property
     def status(self) -> str:
@@ -109,6 +111,7 @@ class TaskOutcome:
             "cost_parts_usd": {k: round(v, 6) for k, v in self.cost_parts.items()},
             "tool_calls": self.tool_calls,
             "error": self.error,
+            "fatal": self.fatal,
             "checks": [
                 {"label": c.label, "passed": c.passed, "detail": c.detail}
                 for c in self.checks
@@ -177,6 +180,9 @@ def run_task(
             agent.run_turn(task.prompt)
         except (AgentError, BackendError) as exc:
             outcome.error = str(exc)
+            # AgentError は BackendError を包んで投げられる。元の例外まで見る。
+            cause = exc.__cause__ if isinstance(exc, AgentError) else exc
+            outcome.fatal = bool(getattr(cause, "is_auth_failure", False))
         except KeyboardInterrupt:
             outcome.error = "中断された"
             raise
@@ -242,6 +248,12 @@ def run_suite(
                         f"  {outcome.status} / {outcome.elapsed:.1f}s"
                         f" / {outcome.requests} 往復 / ${outcome.cost:.4f}"
                     )
+                if outcome.fatal:
+                    # 認証で落ちているなら、残りを走らせても全部同じ壁に当たる。
+                    # 18回繰り返して同じエラーを並べても何も分からない。
+                    if progress:
+                        progress("  認証で落ちたので、ここで打ち切る")
+                    return outcomes
     return outcomes
 
 

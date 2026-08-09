@@ -67,8 +67,13 @@ class BrokenBackend(Backend):
 
     name = "broken"
 
+    def __init__(self, status: int | None = None) -> None:
+        self.status = status
+        self.calls = 0
+
     def stream_turn(self, *, system, history, tools, sink) -> TurnResult:
-        raise BackendError("接続できない")
+        self.calls += 1
+        raise BackendError("接続できない", status=self.status)
 
     def check_credentials(self) -> str | None:
         return None
@@ -249,6 +254,82 @@ class RunTaskTest(unittest.TestCase):
         )
         self.assertEqual(looping.count, 3)
         self.assertFalse(outcome.passed)
+
+
+class FatalErrorTest(unittest.TestCase):
+    """認証で落ちたら、そこで止まること。
+
+    APIキーが無効なまま全組み合わせを走らせても、同じエラーが並ぶだけで
+    何も分からない。時間の無駄でもある。
+    """
+
+    def test_認証エラーは打ち切り対象になる(self) -> None:
+        outcome = run_task(
+            TASKS["count-lines"],
+            model="opus",
+            backend_factory=lambda config: BrokenBackend(status=401),
+        )
+        self.assertTrue(outcome.fatal)
+        self.assertEqual(outcome.status, "エラー")
+
+    def test_権限エラーも打ち切り対象(self) -> None:
+        outcome = run_task(
+            TASKS["count-lines"],
+            model="opus",
+            backend_factory=lambda config: BrokenBackend(status=403),
+        )
+        self.assertTrue(outcome.fatal)
+
+    def test_一時的なエラーは打ち切らない(self) -> None:
+        # レート制限や接続断は、次のタスクでは通るかもしれない
+        for status in (429, 500, None):
+            with self.subTest(status=status):
+                outcome = run_task(
+                    TASKS["count-lines"],
+                    model="opus",
+                    backend_factory=lambda config, s=status: BrokenBackend(status=s),
+                )
+                self.assertFalse(outcome.fatal)
+
+    def test_認証エラーなら残りを走らせない(self) -> None:
+        outcomes = run_suite(
+            [TASKS["count-lines"], TASKS["rename"]],
+            ["opus", "sonnet", "haiku"],
+            backend_factory=lambda config: BrokenBackend(status=401),
+        )
+        # 6件ではなく1件で止まる
+        self.assertEqual(len(outcomes), 1)
+        self.assertTrue(outcomes[0].fatal)
+
+    def test_一時的なエラーなら最後まで走る(self) -> None:
+        outcomes = run_suite(
+            [TASKS["count-lines"], TASKS["rename"]],
+            ["opus"],
+            backend_factory=lambda config: BrokenBackend(status=429),
+        )
+        self.assertEqual(len(outcomes), 2)
+
+    def test_エラー時は判定の失敗を並べない(self) -> None:
+        # 実行できていないのだから、判定が落ちるのは当たり前。原因だけ出す
+        outcome = run_task(
+            TASKS["rename"],
+            model="opus",
+            backend_factory=lambda config: BrokenBackend(status=401),
+        )
+        text = report_mod.format_text([outcome])
+        self.assertIn("接続できない", text)
+        self.assertNotIn("✗", text)
+
+
+class BackendErrorTest(unittest.TestCase):
+    def test_ステータスから再試行の可否を判断できる(self) -> None:
+        self.assertTrue(BackendError("x", status=401).is_auth_failure)
+        self.assertTrue(BackendError("x", status=403).is_auth_failure)
+        self.assertFalse(BackendError("x", status=429).is_auth_failure)
+        self.assertFalse(BackendError("x").is_auth_failure)
+
+    def test_従来どおり文字列として扱える(self) -> None:
+        self.assertEqual(str(BackendError("困った")), "困った")
 
 
 class RunSuiteTest(unittest.TestCase):

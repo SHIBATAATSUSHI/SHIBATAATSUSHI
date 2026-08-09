@@ -206,7 +206,9 @@ def format_text(outcomes: list[TaskOutcome]) -> str:
             )
         )
         if outcome.error:
+            # 実行できていないので、判定が落ちるのは当たり前。原因だけ出す。
             lines.append(f"    ! {outcome.error}")
+            continue
         for check in outcome.failed_checks():
             detail = f" — {check.detail}" if check.detail else ""
             lines.append(f"    ✗ {check.label}{detail}")

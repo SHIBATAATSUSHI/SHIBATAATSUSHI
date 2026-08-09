@@ -186,7 +186,9 @@ class AnthropicBackend(Backend):
         try:
             message = self._consume_stream(messages_api, params, sink)
         except anthropic.APIStatusError as exc:
-            raise BackendError(_describe_api_error(exc)) from exc
+            raise BackendError(
+                _describe_api_error(exc), status=getattr(exc, "status_code", None)
+            ) from exc
         except anthropic.APIConnectionError as exc:
             raise BackendError(f"API に接続できない: {exc}") from exc
         except anthropic.AnthropicError as exc:
@@ -326,7 +328,7 @@ class AnthropicHTTPBackend(AnthropicBackend):
             )
             return self.accumulate(events, sink)
         except HTTPTransportError as exc:
-            raise BackendError(self._describe_http_error(exc)) from exc
+            raise BackendError(self._describe_http_error(exc), status=exc.status) from exc
 
     def accumulate(self, events: Any, sink: StreamSink) -> TurnResult:
         """SSE イベントの並びから結果を組み立てる。

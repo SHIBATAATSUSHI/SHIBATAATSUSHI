@@ -192,13 +192,17 @@ class OpenAICompatBackend(Backend):
                 return self._consume_stream(attempt, tools, sink)
             except openai.BadRequestError as exc:
                 if not droppable:
-                    raise BackendError(self._describe_error(exc)) from exc
+                    raise BackendError(
+                        self._describe_error(exc), status=getattr(exc, "status_code", None)
+                    ) from exc
                 dropped = droppable.pop(0)
                 attempt.pop(dropped, None)
                 sink.ensure_newline()
                 continue
             except openai.APIStatusError as exc:
-                raise BackendError(self._describe_error(exc)) from exc
+                raise BackendError(
+                    self._describe_error(exc), status=getattr(exc, "status_code", None)
+                ) from exc
             except openai.APIConnectionError as exc:
                 raise BackendError(
                     f"{self.config.provider.label} に接続できない: {exc}"
@@ -378,7 +382,7 @@ class OpenAICompatHTTPBackend(OpenAICompatBackend):
                     attempt.pop(droppable.pop(0), None)
                     sink.ensure_newline()
                     continue
-                raise BackendError(self._describe_http_error(exc)) from exc
+                raise BackendError(self._describe_http_error(exc), status=exc.status) from exc
 
     def _describe_http_error(self, exc: HTTPTransportError) -> str:
         label = self.config.provider.label

@@ -154,6 +154,15 @@ def main(argv: list[str] | None = None) -> int:
     print()
     print(report_mod.format_text(outcomes))
 
+    aborted = any(outcome.fatal for outcome in outcomes)
+    if aborted:
+        planned = len(models) * len(tasks) * max(1, args.repeat)
+        print()
+        print(
+            f"認証で落ちたため {len(outcomes)}/{planned} 件で打ち切った。"
+            "APIキーを直してから、もう一度実行すること"
+        )
+
     meta = {
         "started_at": started,
         "finished_at": time.time(),
@@ -178,6 +187,9 @@ def main(argv: list[str] | None = None) -> int:
         path.write_text(report_mod.format_markdown(outcomes), encoding="utf-8")
         print(f"Markdown を書き出した: {path}")
 
+    # 認証で打ち切った場合は、課題の出来とは別物なので区別して返す
+    if aborted:
+        return 2
     # 1件でも落ちていれば非0で返す(CIから回せるように)
     return 0 if all(outcome.passed for outcome in outcomes) else 1
 

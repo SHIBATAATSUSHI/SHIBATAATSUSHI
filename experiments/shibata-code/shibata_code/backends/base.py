@@ -22,7 +22,21 @@ STOP_PAUSE_TURN = "pause_turn"
 
 
 class BackendError(Exception):
-    """このターンを続行できない問題。利用者に見せる日本語を入れる。"""
+    """このターンを続行できない問題。利用者に見せる日本語を入れる。
+
+    HTTP のステータスが分かる場合は `status` に入れる。呼び出し側が
+    「待てば直る(429/5xx)」と「何度やっても同じ(401/403)」を
+    区別できるようにするため。
+    """
+
+    def __init__(self, message: str, *, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
+
+    @property
+    def is_auth_failure(self) -> bool:
+        """認証・権限の問題か。再試行しても結果は変わらない。"""
+        return self.status in (401, 403)
 
 
 class StreamSink(Protocol):
