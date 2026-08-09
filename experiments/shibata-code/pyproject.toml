@@ -12,6 +12,7 @@ dependencies = ["anthropic>=0.121.0", "openai>=2.0.0"]
 
 [project.scripts]
 shibata-code = "shibata_code.cli:main"
+shibata-code-bench = "shibata_code.bench.cli:main"
 
 [tool.setuptools]
-packages = ["shibata_code", "shibata_code.backends"]
+packages = ["shibata_code", "shibata_code.backends", "shibata_code.bench"]
