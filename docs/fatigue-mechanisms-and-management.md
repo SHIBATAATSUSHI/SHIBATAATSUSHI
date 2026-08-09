@@ -13,6 +13,7 @@
 2. **§3 で軸ごとに個別に追う**(見分け方・機序・原因・客観的確認・動く⇄休む・対応)← 本文書の中核
 3. **§4〜§6 で軸を横断する共通レイヤー**(分子 / 生理 / 認知・脳ネットワーク)を掘る
 4. **§7〜§9 で病態別のエビデンスと、動く/休むの分岐、治療・リハビリ**に落とす
+5. **§12(付録A)で二日酔いを題材に、枠組み全体を1つの事例で通す**
 
 依頼者が提示した仮説 — 体温上昇の代謝コスト、不動による血流低下、体力による境界の移動、ワーキングメモリ飽和、脳ネットワークの非効率化 — は**いずれも文献上の裏付けがある**。ただし効き方の大きさと成立条件が違う。それを §5・§6 で定量的に区別する。
 
@@ -365,6 +366,36 @@ Wiehler ら(Current Biology 2022, n=39, 6時間の課題)は MRS で、**高負�
 
 内皮機能障害、微小循環の灌流低下、long COVID での微小血栓仮説などが議論されている。**再現性の議論が続いており**、確定所見として扱うべきではない。
 
+### 4.8 疲労を「感じる」しくみ — 筋からの求心路
+
+筋の代謝的変化(§4.1)がそのまま「だるさ」になるわけではない。**その情報を脳に運ぶ専用の神経がある**。ここが「筋肉で疲労を感じるとはどういうことか」への直接の答えになる。
+
+- 骨格筋には **III群・IV群求心線維**(細い有髄・無髄線維の自由神経終末)が分布し、筋の代謝環境を監視している。筋紡錘やゴルジ腱器官(長さ・張力のセンサー)とは別系統の、**化学環境のセンサー**である。
+- 分子受容体は **ASIC3(プロトン)、P2X(ATP)、TRPV1(プロトン・熱)** の組み合わせ。決定的に重要なのは、**単独の物質ではなく「H⁺ + ATP + 乳酸」が生理的濃度で同時に存在するときに発火する**こと。マウスの筋支配ニューロンでは、低濃度の代謝物混合に応答する集団が ASIC3・P2X5・TRPV1 を分子受容体として使う。「乳酸が溜まると疲れる」が半分正しく半分間違いなのはここで、**乳酸は単独では効かず、3点セットの一要素として読まれている**。
+- しかも**2つの集団に分かれる**:
+
+| 集団 | 応答する濃度 | 担うもの |
+|---|---|---|
+| **メタボ受容器**(metaboreceptor / ergoreceptor) | 運動中に見られる程度の「低濃度」混合 | 筋の恒常性監視、**疲労の感覚** |
+| **メタボ侵害受容器**(metabo-nociceptor) | 虚血性収縮に相当する「高濃度」。ASIC3/TRPV1 を含む | **痛み** |
+
+  → **「だるい」と「痛い」は、同じ筋の同じ代謝物を、閾値の違う別々の線維が読んでいる**。これが「筋肉が疲れた感じ」の受容器レベルの正体。
+
+- この求心路は感覚を作るだけでなく、**中枢の運動出力(central motor drive)を抑制**し、同時に循環反射(メタボリフレックス、§5.1c)を駆動する。§1 の perceived fatigability と performance fatigability の両方に同時に効く**共通経路**である。
+- 上行路は脊髄後角ラミナI → 視床 → **島皮質**。§6.1 の「島皮質が努力コストを計算する」話とここで合流する。末梢の代謝センサーと中枢の意思決定が、同じ島皮質で接続している。
+
+補足: 遅発性筋痛(DOMS)は別機序(機械的損傷と炎症)で、時間経過も受容体も違う。
+
+### 4.9 「気持ち悪い」を作る場所 — 最後野(area postrema)
+
+嘔気は倦怠感としばしばセットで来るので、経路を押さえておく。
+
+- 延髄背側・第四脳室底にある **最後野 (area postrema)** は **血液脳関門を欠く**数少ない領域で、血中・髄液中の物質を直接検出できる。いわゆる**化学受容器引金帯 (CTZ)**。
+- 受容体は **5-HT3、D2、NK1(サブスタンスP)、μ/κオピオイド**。制吐薬の標的がそのまま並ぶ。
+- もう一つの主要入力が**腹部の迷走神経求心路**。消化管の腸クロム親和性細胞がセロトニンを放出 → 迷走神経終末の 5-HT3 → 孤束核(NTS)→ 最後野・嘔吐の中枢パターン発生器。
+- 近年の重要な追加が **GDF15–GFRAL 系**。GDF15 は多様な細胞ストレスで放出される「ストレス応答サイトカイン」で、血中の GDF15 が最後野/NTS に直接届き、**そこにしか存在しない GFRAL 受容体**(共受容体 RET)に結合して嘔気・食欲低下・倦怠感を作る。GDF15 は**栄養の不均衡、アルコール、低酸素、ERストレス、アミノ酸飢餓**で速やかに上昇する。
+- ここが本質的: **最後野は「毒かどうか」を判定しているのではなく、「体内で何かがおかしい」という汎用の異常信号を受けている**。だから嘔気は感染でも薬剤でも代謝異常でも妊娠でも出る。§4.3 の sickness behavior と同じ設計思想であり、**嘔気と倦怠感が同時に来るのは偶然ではなく同一の警報系の出力**である。
+
 ---
 
 ## 5. 生理レイヤー — 提示された仮説の検証
@@ -658,7 +689,105 @@ long COVID 患者に2日間CPETで PEM を誘発し、前後で筋生検を実�
 
 ---
 
-## 12. 主要参考文献
+## 12. 付録A: 二日酔いを8軸で分解する
+
+身近で、時間経過が明確で、原因物質が既知という点で、二日酔いは §2 の枠組みを試すのに好都合な題材。そして**通説の多くが実は支持されていない**という点でも教育的である。
+
+### A.1 用語の訂正 — ケトン体ではなくアセトアルデヒド
+
+エタノールの代謝経路:
+
+```
+エタノール --ADH--> アセトアルデヒド --ALDH2--> 酢酸 --> アセチルCoA --> TCA回路
+```
+
+**アセトアルデヒドはアルデヒドであってケトン体ではない**。ケトン体(アセト酢酸、β-ヒドロキシ酪酸、アセトン)は脂肪酸から肝臓で作られる別カテゴリの分子。
+
+ただし**ケトン体も無関係ではなく、共犯として登場する**。ADH と ALDH2 の反応はどちらも NAD⁺ を NADH に変えるため、**細胞質の NAD⁺/NADH 比が激変する**(実験的には 700:1 → 200:1)。その帰結:
+
+1. 高NADH が 乳酸→ピルビン酸、リンゴ酸→オキサロ酢酸 の変換を止める
+2. → **糖新生の基質が枯れる**。血中**乳酸が上がり血糖が下がる**
+3. 12時間以上の絶食+肝グリコーゲン枯渇が重なると低血糖に至りうる
+4. 糖新生が止まると脂肪酸が動員され、一部がケトン体生成へ流れ、**β-ヒドロキシ酪酸が増える**(重症例がアルコール性ケトアシドーシス)
+
+→ 「ケトン体が溜まっている」という直感は**主犯ではないが、代謝の下流に確かに存在する**。「翌日、空腹で、頭も体も動かない」の一部はこの低血糖と乳酸上昇で説明できる。
+
+### A.2 通説の否定 — 症状のピーク時にアセトアルデヒドはほぼ残っていない
+
+二日酔い研究の最大の逆説がこれ。症状が最も強い時点では、血中エタノールもアセトアルデヒドもほぼゼロに近い。実際、**二日酔い重症度と血中アセトアルデヒド濃度の相関は有意ではない**(血中エタノール濃度とは相関する)。
+
+→ **「毒が血中に大量にあるからだるい」という単純モデルは成立しない。** 症状は毒が去った後に来る。
+
+### A.3 現在の主説 — サイトカインによる sickness behavior
+
+飲酒後の二日酔い状態で **IL-6、IL-10、IL-12、IFN-γ、TNF-α** の上昇が確認されており、**二日酔いの重症度は血中 IL-6、TNF-α、CRP と有意に正相関する**。
+
+これは §4.3 とまったく同じ経路である。すなわち:
+
+> **二日酔いのだるさは、感染症でだるいのと同じ仕組みで作られている。**
+> サイトカイン → 脳血管内皮の PGE₂ → 体温調節中枢・神経細胞のGPCR、および迷走神経求心路 → sickness behavior。
+
+アセトアルデヒドの役割は「直接毒として効く」より、**酸化ストレスと炎症を点火する引き金**、および腸管透過性亢進によるエンドトキシン(腸内細菌由来LPS)流入を介した**間接的なもの**と位置づけられている。飲酒4時間後の血中エタノール濃度が(アセトアルデヒドではなく)IL-6 上昇と相関するという所見もこれを支持する。
+
+なお **ALDH2\*2 変異**(東アジアに高頻度)を持つ場合はアセトアルデヒドが蓄積しやすく、フラッシング・動悸・強い不快感が前面に出る。この集団では直接作用の寄与が大きくなる。
+
+### A.4 嘔気はどこで感じているか → **脳(最後野)+ 消化管の二重入力**
+
+§4.9 の経路がそのまま動く。
+
+- **中枢側**: 最後野。血液脳関門がないため血中の異常を直接検出。**アルコールは GDF15 を上昇させる刺激として明示的に挙げられており**、GDF15 → GFRAL(最後野/NTS)経路は**嘔気と倦怠感を同時に**作る。ここが「気持ち悪さ」と「だるさ」が必ずセットで来る理由。
+- **末梢側**: アルコールは胃粘膜を直接刺激し、胃酸分泌を増やし、胃排出を遅らせる。腸クロム親和性細胞のセロトニン放出 → 迷走神経終末の 5-HT3 → NTS。
+- つまり**「気持ち悪い」を作っているのは脳だが、その入力の半分は消化管から来ている**。
+
+### A.5 「全身が重い」は酸素運搬の問題ではない
+
+**血中酸素の運搬能はアルコールでは基本的に落ちない。** ヘモグロビンも酸素飽和度も正常であり、この点は明確に否定してよい。「酸素がうまく運ばれていない」という説明は成り立たない。
+
+代わりに効いているのは以下の合算。8軸で分解すると:
+
+| 軸 | 二日酔いでの寄与 | 機序 |
+|---|---|---|
+| **軸2 消耗感** | **主役** | サイトカイン(IL-6/TNF/CRP)→ PGE₂・迷走神経 → sickness behavior(§4.3) |
+| **軸1 眠気** | 大きい | 前半は徐波睡眠が増えREMが抑制、後半に**REMリバウンドと睡眠の断片化**。総量が足りていても質が崩れる |
+| **軸5 認知的疲労** | 大きい | 睡眠断片化 + 炎症 + 低血糖の三重。判断が雑になる(§4.6 の衝動側シフトと同方向) |
+| **軸3 運動不耐** | あり | 血漿量低下、心拍上昇、乳酸上昇、低血糖 |
+| **軸8 起立不耐** | あり | バソプレシン抑制 → 利尿 → 血漿量減少 → 立ちくらみ |
+| **軸7 気分** | あり | 翌日の不安・抑うつ("hangxiety")。GABA/グルタミン酸系のリバウンド |
+| **軸4 筋力低下** | 通常なし | ただし大量飲酒では急性アルコール性ミオパチー・横紋筋融解(CK上昇)が起こりうる |
+| **軸6 アパシー** | 通常なし | — |
+
+**脱水説の位置づけ**: バソプレシン抑制による利尿は確かに起きる。しかし**電解質・水分状態と二日酔い重症度の相関は弱い**。これが「水を飲んでも治らない」の理由 — 水分補給は軸8と軸3には効くが、**主役の軸2(炎症)には効かない**。
+
+**コンジナー(不純物)**: 赤ワインやダークスピリッツに多い。特にメタノールは ADH で **ホルムアルデヒド → ギ酸** に代謝され、その代謝タイミングが二日酔い症状の時間経過と一致するため寄与が疑われている。ただし**エタノール自体の影響のほうがはるかに大きい**。
+
+### A.6 「筋肉が重い」感覚の正体
+
+§4.8 の機序がそのまま当てはまる。NADH過剰による乳酸上昇 + 低血糖 + 炎症により、筋の III/IV群求心線維のメタボ受容器(ASIC3・P2X5・TRPV1)が発火しやすい代謝環境が作られる。加えて炎症性サイトカインは筋の求心路と中枢の双方に作用する。
+
+→ **「筋肉に何か溜まっている」という感覚は錯覚ではなく、実際に代謝物センサーが読んだ結果**である。ただし読んでいるのは「疲労物質」という単一の何かではなく、**H⁺・ATP・乳酸の組み合わせ**。
+
+### A.7 対応策(軸別)
+
+| 軸/病態 | 効くもの | 効かない・注意 |
+|---|---|---|
+| 軸1 眠気 | **睡眠を取り直す**(§3.1: 睡眠でしか返らない) | 安静だけ、カフェイン(知覚を消すだけで負債は残る) |
+| 軸2 消耗感 | 基本は時間。NSAIDs は PGE₂ 経路に理屈上合致 | **アセトアミノフェンは避ける**(CYP2E1誘導下で肝毒性代謝物 NAPQI が増える)。「迎え酒」は問題を先送りするだけ |
+| 軸3・軸8 | 水分 + 電解質・塩分 | 重症度の主因ではないので、これだけでは治らない |
+| 低血糖・乳酸 | 炭水化物の摂取 | — |
+| 予防 | **飲酒量そのものの削減**(血中エタノール濃度が最大の予測因子)、空腹で飲まない、コンジナーの少ない蒸留酒 | 市販の各種サプリのエビデンスは総じて弱い |
+
+**最も確実な介入は飲酒量の削減。** 血中エタノール濃度が重症度の最大の予測因子であり、コンジナーや水分状態の寄与はそれに比べれば小さい。
+
+### A.8 この事例から一般化できること
+
+1. **症状のピークと原因物質のピークはずれる**。二日酔いではアセトアルデヒドが消えた後に症状が来る。倦怠感一般でも「今つらい原因が今の血中にある」とは限らない
+2. **炎症経路は原因を問わず同じ出力を出す**。感染でも飲酒でもがんでも、IL-6/TNF → PGE₂ → sickness behavior という共通の最終経路を通る(§4.3)
+3. **通説は検証すると弱いことが多い**。脱水説はほぼ通説だが重症度との相関は弱い。倦怠感の分野全般でこの傾向がある
+4. **軸ごとに効く介入が違う**。二日酔いに「水を飲む」が期待ほど効かないのは、それが軸8には効いて軸2には効かないから。§3 の軸別の見方はここでも機能する
+
+---
+
+## 13. 主要参考文献
 
 **分解・分類**
 - Enoka & Duchateau. Translating Fatigue to Human Performance. / Fatigue and Human Performance: An Updated Framework. https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9807493/
@@ -671,6 +800,26 @@ long COVID 患者に2日間CPETで PEM を誘発し、前後で筋生検を実�
 - New insights into cellular and molecular mechanisms of skeletal muscle fatigue (2024). https://journals.physiology.org/doi/full/10.1152/ajpcell.00213.2024
 - Myasthenia gravis: Frequently asked questions. Cleve Clin J Med. https://www.ccjm.org/content/90/2/103
 - Myasthenia Gravis and its Association With Thyroid Diseases. https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7536109/
+
+**疲労・嘔気の受容機構**
+- Light et al. Dorsal root ganglion neurons innervating skeletal muscle respond to physiological combinations of protons, ATP, and lactate mediated by ASIC, P2X, and TRPV1. https://pubmed.ncbi.nlm.nih.gov/18509077/
+- Comprehensive phenotyping of group III and IV muscle afferents in mouse. J Neurophysiol. https://journals.physiology.org/doi/full/10.1152/jn.01067.2012
+- Amann et al. Group III and IV muscle afferents: role on central motor drive and clinical implications. Neuroscience. https://www.ibroneuroscience.org/article/S0306-4522(15)00133-5/abstract
+- Effects of Lactate on One Class of Group III (CT3) Muscle Afferents. Front Cell Neurosci 2020. https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7424053/
+- Physiology, Chemoreceptor Trigger Zone. StatPearls. https://www.ncbi.nlm.nih.gov/books/NBK537133/
+- Nausea and the Brain: The Chemoreceptor Trigger Zone Enters the Molecular Age. Neuron. https://www.sciencedirect.com/science/article/pii/S0896627321000040
+- Borner et al. Central mechanisms of emesis: A role for GDF15. Neurogastroenterol Motil 2025. https://pmc.ncbi.nlm.nih.gov/articles/PMC11866100/
+- GDF15 Induces Anorexia through Nausea and Emesis. Cell Metab. https://www.cell.com/cell-metabolism/fulltext/S1550-4131(19)30669-2
+
+**二日酔い(付録A)**
+- The Inflammatory Response to Alcohol Consumption and Its Role in the Pathology of Alcohol Hangover. J Clin Med. https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7408936/
+- The Role of Alcohol Metabolism in the Pathology of Alcohol Hangover. J Clin Med 2020. https://doi.org/10.3390/jcm9113421
+- Immune Responses after Heavy Alcohol Consumption: Cytokine Concentrations in Hangover-Sensitive and Hangover-Resistant Drinkers. https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8067124/
+- Turner et al. Inflammation, oxidative stress and gut microbiome perturbation: mechanisms and treatment of the alcohol hangover. Alcohol Clin Exp Res 2024. https://onlinelibrary.wiley.com/doi/10.1111/acer.15396
+- Alcohol metabolism (NAD⁺/NADH shift). Medicine LibreTexts. https://med.libretexts.org/Bookshelves/Basic_Science/Cell_Biology_Genetics_and_Biochemistry_for_Pre-Clinical_Students/09:_Disorders_of_monosaccharide_metabolism_and_other_metabolic_conditions/9.02:_Alcohol_metabolism
+- Alcoholic Ketoacidosis. Medscape. https://emedicine.medscape.com/article/116820-overview
+- Alcohol use and sleep(REM抑制とリバウンド). https://en.wikipedia.org/wiki/Alcohol_use_and_sleep
+- Hangovers. NIAAA. https://www.niaaa.nih.gov/publications/brochures-and-fact-sheets/hangovers
 
 **ミトコンドリア・代謝**
 - WASF3 disrupts mitochondrial respiration in ME/CFS. PNAS 2023. https://www.pnas.org/doi/10.1073/pnas.2302738120
