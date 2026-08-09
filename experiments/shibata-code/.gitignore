@@ -1,6 +1,10 @@
 # セッションの保存先(作業ディレクトリごとに作られる)
 .shibata-code/
 
+# ベンチの出力。残したい結果は git add -f で明示的に入れる
+bench.json
+bench.md
+
 __pycache__/
 *.py[cod]
 *.egg-info/
