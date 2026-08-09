@@ -20,6 +20,7 @@ from .backends import (
     BackendError,
     build_backend,
 )
+from .compaction import Compactor
 from .config import Config
 from .messages import ToolCall, ToolResult
 from .permissions import PermissionGate
@@ -53,6 +54,9 @@ class Agent:
         self._backend = backend
         # どの設定で作ったバックエンドかを覚えておき、設定が変わったら作り直す
         self._backend_config = config if backend is not None else None
+        self.compactor = Compactor(config, ui)
+        # 直近のリクエストで送った入力量。履歴を畳む判断に使う。
+        self._last_usage: dict[str, int] | None = None
         # システムプロンプトはセッション中固定にする(キャッシュを壊さないため)
         self.system_prompt = build_system_prompt(
             config.workspace,
@@ -90,6 +94,9 @@ class Agent:
         self.session.append_user_text(user_input)
 
         for _ in range(self.config.max_iterations):
+            # 送る前に畳む。この時点の履歴は必ず整合している
+            # (ユーザー発言かツール結果で終わっている)。
+            self.maybe_compact()
             backend = self.backend
             try:
                 result = backend.stream_turn(
@@ -102,6 +109,7 @@ class Agent:
                 raise AgentError(str(exc)) from exc
 
             self.session.usage.add(result.usage)
+            self._last_usage = result.usage
             self.session.append_turn(
                 result, provider=self.config.model.provider, model=self.config.model.id
             )
@@ -125,8 +133,7 @@ class Agent:
             if result.stop_reason != STOP_TOOL_USE or not result.tool_calls:
                 return
 
-            results = [self._execute_tool(call) for call in result.tool_calls]
-            self.session.append_tool_results(results)
+            self._run_tools(result.tool_calls)
         else:
             self.ui.warn(
                 f"ツール呼び出しが {self.config.max_iterations} 回に達したので打ち切った。"
@@ -134,8 +141,58 @@ class Agent:
             )
 
     # ------------------------------------------------------------------
+    # 履歴の圧縮
+    # ------------------------------------------------------------------
+    def maybe_compact(self, *, force: bool = False) -> bool:
+        """必要なら履歴を畳む。畳んだら True。"""
+        if not force and not self.compactor.should_compact(
+            last_usage=self._last_usage, messages=self.session.messages
+        ):
+            return False
+
+        self.ui.info("履歴が長くなったので要約して畳む…")
+        outcome = self.compactor.compact(self.session.messages, self.backend)
+        if not outcome.performed:
+            self.ui.warn(f"畳めなかった({outcome.reason})。そのまま続ける")
+            return False
+
+        self.ui.notice(
+            f"履歴を {outcome.before} 件から {outcome.after} 件に畳んだ"
+        )
+        # 畳んだ直後は送信量が読めないので、次の応答まで判断を保留する
+        self._last_usage = None
+        return True
+
+    # ------------------------------------------------------------------
     # ツール実行
     # ------------------------------------------------------------------
+    def _run_tools(self, calls: list[ToolCall]) -> None:
+        """ツールを順に実行し、結果をまとめて積む。
+
+        途中で中断された場合も、呼び出された分すべてに結果を返す。
+        tool_call に対応する結果が欠けた履歴は、次のリクエストで
+        API に拒否されるため。
+        """
+        results: list[ToolResult] = []
+        try:
+            for call in calls:
+                results.append(self._execute_tool(call))
+        except KeyboardInterrupt:
+            # 未実行の分を埋めてから中断を伝える
+            done = {result.tool_call_id for result in results}
+            for call in calls:
+                if call.id not in done:
+                    results.append(
+                        ToolResult(
+                            tool_call_id=call.id,
+                            content="ユーザーが作業を中断した",
+                            is_error=True,
+                        )
+                    )
+            self.session.append_tool_results(results)
+            raise
+        self.session.append_tool_results(results)
+
     def _execute_tool(self, call: ToolCall) -> ToolResult:
         """ツール呼び出し1件を実行し、結果を返す。"""
         payload = dict(call.arguments or {})

@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from .gitignore import GitIgnore
 from .workspace import Workspace, WorkspaceError
 
 # 1回のツール結果としてモデルに返す最大文字数。
@@ -40,7 +41,8 @@ IGNORED_DIRS = {
     ".ruff_cache",
     "dist",
     "build",
-    ".shibata_code",
+    # セッションの保存先。自分が書いたものを検索結果に出さない。
+    ".shibata-code",
 }
 
 
@@ -120,6 +122,7 @@ class Toolbox:
         *,
         bash_timeout: int = 120,
         enable_bash: bool | None = None,
+        respect_gitignore: bool = True,
     ) -> None:
         self.workspace = workspace
         self.bash_timeout = bash_timeout
@@ -127,6 +130,10 @@ class Toolbox:
         # 使えないツールを見せるとモデルが無駄に試すので、登録しない。
         self.shell = shutil.which("bash") or shutil.which("sh")
         self.bash_enabled = self.shell is not None if enable_bash is None else enable_bash
+        # 固定の除外リストだけでは実リポジトリに足りないので .gitignore も見る
+        self.gitignore = (
+            GitIgnore.load(workspace.root) if respect_gitignore else GitIgnore(workspace.root)
+        )
         # read したファイルの更新時刻を覚えておき、編集時の陳腐化を検出する。
         self._read_state: dict[Path, float] = {}
         self._specs: dict[str, ToolSpec] = {}
@@ -475,6 +482,8 @@ class Toolbox:
                 continue
             if any(part in IGNORED_DIRS for part in candidate.parts):
                 continue
+            if self.gitignore.is_ignored(candidate):
+                continue
             matches.append(candidate)
 
         if not matches:
@@ -569,6 +578,7 @@ class Toolbox:
             raise ToolError(f"正規表現が不正: {exc}") from exc
 
         files = [target] if target.is_file() else _iter_files(target)
+        files = [f for f in files if not self.gitignore.is_ignored(f)]
         hits: list[str] = []
         counts: dict[str, int] = {}
 

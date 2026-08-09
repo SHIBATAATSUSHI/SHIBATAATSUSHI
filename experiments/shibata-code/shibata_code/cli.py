@@ -39,6 +39,7 @@ HELP_TEXT = """\
   /max-tokens [N]    1リクエストの出力上限を表示・変更
   /tools             利用できるツールの一覧
   /cost              このセッションのトークン利用量と概算コスト
+  /compact           履歴をいま畳む(長い作業の区切りに)
   /clear             会話履歴を消す(設定と利用量は残る)
   /save              セッションを .shibata-code/sessions/ に保存
   /exit              終了 (Ctrl-D でも同じ)
@@ -115,6 +116,18 @@ def build_parser() -> argparse.ArgumentParser:
             "通信経路。auto(既定)は SDK があればそれを使う。"
             "http は SDK 不要で標準ライブラリだけで動く(iOS 等)"
         ),
+    )
+    parser.add_argument(
+        "--no-compaction",
+        dest="compaction",
+        action="store_false",
+        help="履歴が長くなっても自動で畳まない(既定は畳む)",
+    )
+    parser.add_argument(
+        "--context-window",
+        type=int,
+        default=None,
+        help="モデルのコンテキスト長を明示する(畳む閾値の計算に使う)",
     )
     parser.add_argument(
         "--compact",
@@ -311,6 +324,11 @@ class Repl:
             self.ui.notice(self.agent.session.usage.summary(self.config.model))
             return False
 
+        if command == "/compact":
+            if not self.agent.maybe_compact(force=True):
+                self.ui.info("畳まなかった。")
+            return False
+
         if command == "/clear":
             self.agent.session.clear()
             self.ui.notice("会話履歴を消した。")
@@ -347,6 +365,8 @@ def main(argv: list[str] | None = None) -> int:
             base_url=args.base_url,
             force_reasoning_effort=args.reasoning_effort,
             transport=args.transport,
+            compaction=args.compaction,
+            context_window=args.context_window,
         )
     except ValueError as exc:
         ui.error(str(exc))

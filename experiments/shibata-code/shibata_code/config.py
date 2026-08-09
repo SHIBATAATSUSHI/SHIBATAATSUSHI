@@ -36,6 +36,8 @@ class ModelSpec:
     id: str
     label: str
     max_output: int = 32_000
+    # 入力の上限。コンパクションの発動判断に使う。不明なら控えめな値にする
+    context_window: int = 128_000
     input_price: float = 0.0
     output_price: float = 0.0
     cache_write_price: float = 0.0
@@ -69,6 +71,7 @@ def _anthropic(**kwargs) -> ModelSpec:
     return ModelSpec(
         provider="anthropic",
         max_output=128_000,
+        context_window=1_000_000,
         supports_adaptive_thinking=True,
         supports_effort=True,
         **kwargs,
@@ -118,6 +121,7 @@ MODEL_PRESETS: dict[str, ModelSpec] = {
         id="claude-haiku-4-5",
         label="Claude Haiku 4.5",
         max_output=64_000,
+        context_window=200_000,
         input_price=1.0,
         output_price=5.0,
         cache_write_price=1.25,
@@ -149,12 +153,14 @@ MODEL_PRESETS: dict[str, ModelSpec] = {
         id="gemini-2.5-pro",
         label="Gemini 2.5 Pro",
         max_output=64_000,
+        context_window=1_000_000,
     ),
     "gemini-flash": ModelSpec(
         provider="google",
         id="gemini-2.5-flash",
         label="Gemini 2.5 Flash",
         max_output=64_000,
+        context_window=1_000_000,
     ),
     # --- DeepSeek ----------------------------------------------------
     "deepseek": ModelSpec(
@@ -241,6 +247,7 @@ def _spec_for(provider: ProviderSpec, model_id: str) -> ModelSpec:
             id=model_id,
             label=model_id,
             max_output=128_000,
+            context_window=1_000_000,
             # 現行世代とみなす。旧世代を指定した場合は 400 が返るので分かる。
             supports_adaptive_thinking=True,
             supports_effort=True,
@@ -281,6 +288,14 @@ class Config:
     force_reasoning_effort: bool = False
     # 通信経路(auto / sdk / http)
     transport: str = "auto"
+    # 履歴が長くなったら自動で要約して畳むか
+    compaction: bool = True
+    # コンテキスト長のうち、何割まで使ったら畳むか
+    compact_ratio: float = 0.7
+    # 畳むときに手つかずで残す直近メッセージ数
+    compact_keep_recent: int = 6
+    # モデルのコンテキスト長を明示的に上書きする
+    context_window: int | None = None
 
     @property
     def provider(self) -> ProviderSpec:
@@ -289,6 +304,14 @@ class Config:
     def resolved_base_url(self) -> str | None:
         """実際に使う接続先。"""
         return self.base_url or self.model.provider_spec.base_url
+
+    def resolved_context_window(self) -> int:
+        """実際に使うコンテキスト長。"""
+        return self.context_window or self.model.context_window
+
+    def compact_threshold(self) -> int:
+        """このトークン数を超えたら履歴を畳む。"""
+        return int(self.resolved_context_window() * self.compact_ratio)
 
     def with_model(self, name: str) -> "Config":
         """モデルだけ差し替えた新しい設定を返す。"""
@@ -318,6 +341,8 @@ def build_config(
     base_url: str | None = None,
     force_reasoning_effort: bool = False,
     transport: str = "auto",
+    compaction: bool = True,
+    context_window: int | None = None,
 ) -> Config:
     """CLI 引数から `Config` を組み立てる。"""
     spec = resolve_model(model)
@@ -352,4 +377,6 @@ def build_config(
         base_url=base_url or os.environ.get("SHIBATA_CODE_BASE_URL"),
         force_reasoning_effort=force_reasoning_effort,
         transport=transport,
+        compaction=compaction,
+        context_window=context_window,
     )
