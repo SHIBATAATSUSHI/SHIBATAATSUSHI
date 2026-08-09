@@ -142,6 +142,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--resume", action="store_true", help="最後に保存したセッションを再開する"
     )
     parser.add_argument("--models", action="store_true", help="モデル短縮名の一覧を出して終了")
+    parser.add_argument(
+        "--providers",
+        action="store_true",
+        help="プロバイダと必要な環境変数の一覧を出して終了",
+    )
     parser.add_argument("--no-color", action="store_true", help="色を使わない")
     parser.add_argument("--version", action="version", version=f"shibata-code {__version__}")
     return parser
@@ -350,6 +355,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.models:
         print_models(ui)
+        return 0
+
+    if args.providers:
+        print_providers(ui)
         return 0
 
     try:

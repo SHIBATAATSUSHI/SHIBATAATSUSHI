@@ -65,6 +65,29 @@ class ComposePromptTest(unittest.TestCase):
         self.assertEqual(compose_prompt([], "   \n"), "")
 
 
+class ListingFlagTest(unittest.TestCase):
+    """一覧表示のフラグ。対話モードのコマンドと揃っていること。"""
+
+    def test_modelsフラグで一覧を出して終わる(self) -> None:
+        with contextlib.redirect_stdout(io.StringIO()) as captured:
+            code = main(["--models", "--no-color"])
+        self.assertEqual(code, 0)
+        self.assertIn("opus", captured.getvalue())
+
+    def test_providersフラグで一覧を出して終わる(self) -> None:
+        with contextlib.redirect_stdout(io.StringIO()) as captured:
+            code = main(["--providers", "--no-color"])
+        self.assertEqual(code, 0)
+        self.assertIn("ANTHROPIC_API_KEY", captured.getvalue())
+
+    def test_対話モードのコマンドとフラグが揃っている(self) -> None:
+        # /models と /providers があるなら、CLI にも同じ口があること
+        parser = build_parser()
+        flags = {action.dest for action in parser._actions}
+        self.assertIn("models", flags)
+        self.assertIn("providers", flags)
+
+
 class ReplCommandTest(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()

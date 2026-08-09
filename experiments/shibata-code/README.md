@@ -72,8 +72,9 @@ git diff | python -m shibata_code -p "この差分をレビューして"
 # 前回の続きから
 python -m shibata_code --resume
 
-# 使えるモデルの一覧
+# 使えるモデルの一覧 / 設定済みのキーの確認
 python -m shibata_code --models
+python -m shibata_code --providers
 ```
 
 ### 主なオプション
@@ -267,7 +268,7 @@ cd experiments/shibata-code
 python -m unittest discover -s tests
 ```
 
-260件。外部通信は一切しない。
+263件。外部通信は一切しない。
 
 - `test_workspace.py` / `test_tools.py` — パス境界と各ツール
 - `test_ui.py` — 細い画面での切り詰めと compact モード
