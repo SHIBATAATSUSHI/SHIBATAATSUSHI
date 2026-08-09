@@ -75,6 +75,8 @@ class TaskOutcome:
     cache_read_tokens: int = 0
     cache_creation_tokens: int = 0
     cost: float = 0.0
+    # 費用の内訳(input / output / cache_write / cache_read)
+    cost_parts: dict[str, float] = field(default_factory=dict)
     tool_calls: int = 0
     answer: str = ""
     error: str = ""
@@ -104,6 +106,7 @@ class TaskOutcome:
             "cache_read_tokens": self.cache_read_tokens,
             "cache_creation_tokens": self.cache_creation_tokens,
             "cost_usd": round(self.cost, 6),
+            "cost_parts_usd": {k: round(v, 6) for k, v in self.cost_parts.items()},
             "tool_calls": self.tool_calls,
             "error": self.error,
             "checks": [
@@ -188,7 +191,8 @@ def run_task(
         outcome.output_tokens = usage.output_tokens
         outcome.cache_read_tokens = usage.cache_read_tokens
         outcome.cache_creation_tokens = usage.cache_creation_tokens
-        outcome.cost = usage.cost(config.model)
+        outcome.cost_parts = usage.cost_breakdown(config.model)
+        outcome.cost = sum(outcome.cost_parts.values())
         outcome.tool_calls = count_tool_calls(session)
         outcome.answer = last_assistant_text(session)
 

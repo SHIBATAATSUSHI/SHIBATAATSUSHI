@@ -298,7 +298,17 @@ class ResolveTasksTest(unittest.TestCase):
             resolve_tasks("そんなタスク")
 
 
-def outcome(model: str, task: str, *, passed: bool, cost: float, elapsed: float) -> TaskOutcome:
+def outcome(
+    model: str,
+    task: str,
+    *,
+    passed: bool,
+    cost: float,
+    elapsed: float,
+    cache_write: int = 0,
+    cache_read: int = 0,
+    cost_parts: dict | None = None,
+) -> TaskOutcome:
     return TaskOutcome(
         task=task,
         task_title=task,
@@ -310,7 +320,10 @@ def outcome(model: str, task: str, *, passed: bool, cost: float, elapsed: float)
         requests=2,
         input_tokens=1_000,
         output_tokens=100,
+        cache_creation_tokens=cache_write,
+        cache_read_tokens=cache_read,
         cost=cost,
+        cost_parts=cost_parts or {},
         tool_calls=1,
     )
 
@@ -390,6 +403,87 @@ class ReportTest(unittest.TestCase):
         self.assertEqual(payload["meta"]["models"], ["opus"])
         self.assertEqual(len(payload["runs"]), 4)
         self.assertEqual(len(payload["summary"]), 2)
+
+
+class CostBreakdownTest(unittest.TestCase):
+    """合計費用の理由が読めること。
+
+    入力と出力のトークン数だけ見ても勘定が合わないことがある。
+    短い作業ではキャッシュ書き込みが費用の大半を占めるため。
+    """
+
+    def test_内訳の合計が費用と一致する(self) -> None:
+        from shibata_code.config import MODEL_PRESETS
+        from shibata_code.session import Usage
+
+        usage = Usage(
+            input_tokens=1_891,
+            output_tokens=580,
+            cache_creation_tokens=6_000,
+            cache_read_tokens=12_000,
+        )
+        spec = MODEL_PRESETS["opus"]
+        parts = usage.cost_breakdown(spec)
+        self.assertAlmostEqual(sum(parts.values()), usage.cost(spec))
+        # 入力・出力だけでは説明がつかない
+        self.assertGreater(parts["cache_write"], parts["input"])
+
+    def test_集計でキャッシュも足し上げる(self) -> None:
+        rows = [
+            outcome(
+                "opus",
+                "count-lines",
+                passed=True,
+                cost=0.03,
+                elapsed=5.0,
+                cache_write=3_000,
+                cache_read=1_000,
+                cost_parts={"input": 0.005, "output": 0.005, "cache_write": 0.02},
+            ),
+            outcome(
+                "opus",
+                "careful-edit",
+                passed=True,
+                cost=0.03,
+                elapsed=6.0,
+                cache_write=2_000,
+                cache_read=4_000,
+                cost_parts={"input": 0.005, "output": 0.005, "cache_write": 0.02},
+            ),
+        ]
+        summary = report_mod.summarize(rows)[0]
+        self.assertEqual(summary.cache_creation_tokens, 5_000)
+        self.assertEqual(summary.cache_read_tokens, 5_000)
+        self.assertAlmostEqual(summary.cost_parts["cache_write"], 0.04)
+
+    def test_キャッシュがあれば内訳を表示する(self) -> None:
+        rows = [
+            outcome(
+                "opus",
+                "count-lines",
+                passed=True,
+                cost=0.03,
+                elapsed=5.0,
+                cache_write=3_000,
+                cost_parts={"input": 0.005, "output": 0.005, "cache_write": 0.02},
+            )
+        ]
+        text = report_mod.format_text(rows)
+        self.assertIn("費用の内訳", text)
+        self.assertIn("キャッシュ書き", text)
+
+    def test_キャッシュが無ければ内訳は出さない(self) -> None:
+        rows = [
+            outcome(
+                "opus",
+                "count-lines",
+                passed=True,
+                cost=0.01,
+                elapsed=5.0,
+                cost_parts={"input": 0.005, "output": 0.005},
+            )
+        ]
+        self.assertNotIn("費用の内訳", report_mod.format_text(rows))
 
 
 class BenchCliTest(unittest.TestCase):

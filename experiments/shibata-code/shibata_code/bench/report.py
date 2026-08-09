@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .runner import TaskOutcome
 
@@ -46,7 +46,10 @@ class ModelSummary:
     requests: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
+    cache_creation_tokens: int = 0
+    cache_read_tokens: int = 0
     cost: float = 0.0
+    cost_parts: dict[str, float] = field(default_factory=dict)
     tool_calls: int = 0
     priced: bool = True
 
@@ -79,8 +82,11 @@ class ModelSummary:
             "requests": self.requests,
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
+            "cache_creation_tokens": self.cache_creation_tokens,
+            "cache_read_tokens": self.cache_read_tokens,
             "tool_calls": self.tool_calls,
             "total_cost_usd": round(self.cost, 6),
+            "cost_parts_usd": {k: round(v, 6) for k, v in self.cost_parts.items()},
             "cost_per_pass_usd": (
                 round(self.cost_per_pass, 6) if self.cost_per_pass is not None else None
             ),
@@ -106,11 +112,38 @@ def summarize(outcomes: list[TaskOutcome]) -> list[ModelSummary]:
         summary.requests += outcome.requests
         summary.input_tokens += outcome.input_tokens
         summary.output_tokens += outcome.output_tokens
+        summary.cache_creation_tokens += outcome.cache_creation_tokens
+        summary.cache_read_tokens += outcome.cache_read_tokens
         summary.cost += outcome.cost
         summary.tool_calls += outcome.tool_calls
+        for key, value in (outcome.cost_parts or {}).items():
+            summary.cost_parts[key] = summary.cost_parts.get(key, 0.0) + value
     for summary in summaries.values():
         summary.priced = summary.cost > 0
     return list(summaries.values())
+
+
+#: 費用内訳の表示名
+_PART_LABELS = (
+    ("input", "入力"),
+    ("output", "出力"),
+    ("cache_write", "キャッシュ書き"),
+    ("cache_read", "キャッシュ読み"),
+)
+
+
+def breakdown_line(summary: ModelSummary) -> str:
+    """費用の内訳を1行にする。合計だけでは理由が読めないため。"""
+    parts = [
+        f"{label} {_money(summary.cost_parts.get(key, 0.0))}"
+        for key, label in _PART_LABELS
+        if summary.cost_parts.get(key, 0.0) > 0
+    ]
+    tokens = (
+        f"(キャッシュ 書き {summary.cache_creation_tokens:,}"
+        f" / 読み {summary.cache_read_tokens:,} トークン)"
+    )
+    return f"{summary.model_key}: " + " + ".join(parts) + f" {tokens}"
 
 
 def _money(value: float, priced: bool = True) -> str:
@@ -201,6 +234,17 @@ def format_text(outcomes: list[TaskOutcome]) -> str:
             )
         )
 
+    # 入力と出力のトークン数だけでは合計費用の説明がつかないことが多い。
+    # キャッシュ書き込みが効いている場合は内訳を添える。
+    with_cache = [
+        s for s in summaries if s.priced and (s.cache_creation_tokens or s.cache_read_tokens)
+    ]
+    if with_cache:
+        lines.append("")
+        lines.append("=== 費用の内訳 ===")
+        for summary in with_cache:
+            lines.append(breakdown_line(summary))
+
     if any(not s.priced for s in summaries):
         lines.append("")
         lines.append("※ 費用が「—」のモデルは価格を未設定にしてある。トークン数だけ見ること。")
@@ -214,17 +258,29 @@ def format_markdown(outcomes: list[TaskOutcome], *, title: str = "Shibata Code �
 
     lines.append("## モデル別")
     lines.append("")
-    lines.append("| モデル | 提供元 | 成功 | 平均秒 | 往復 | ツール | 入力トークン | 出力トークン | 合計費用 | 成功1件あたり |")
-    lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
+    lines.append(
+        "| モデル | 提供元 | 成功 | 平均秒 | 往復 | ツール | 入力 | 出力 |"
+        " キャッシュ書き | キャッシュ読み | 合計費用 | 成功1件あたり |"
+    )
+    lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
     for s in summaries:
         per_pass = s.cost_per_pass
         lines.append(
             f"| {s.model_label} | {s.provider} | {s.passed}/{s.runs} |"
             f" {s.avg_elapsed:.1f} | {s.requests} | {s.tool_calls} |"
             f" {s.input_tokens:,} | {s.output_tokens:,} |"
+            f" {s.cache_creation_tokens:,} | {s.cache_read_tokens:,} |"
             f" {_money(s.cost, s.priced)} |"
             f" {_money(per_pass) if per_pass is not None else '—'} |"
         )
+
+    if any(s.priced and s.cost_parts for s in summaries):
+        lines.append("")
+        lines.append("### 費用の内訳")
+        lines.append("")
+        for s in summaries:
+            if s.priced and s.cost_parts:
+                lines.append(f"- {breakdown_line(s)}")
 
     lines.append("")
     lines.append("## タスク別")

@@ -39,14 +39,23 @@ class Usage:
         self.cache_creation_tokens += usage.get("cache_creation_tokens", 0) or 0
         self.cache_read_tokens += usage.get("cache_read_tokens", 0) or 0
 
+    def cost_breakdown(self, spec: Any) -> dict[str, float]:
+        """費用の内訳(USD)。合計だけ見ると理由が分からないので分けて持つ。
+
+        短い作業ではキャッシュ書き込みが費用の大半を占めることがある。
+        入力・出力のトークン数だけ眺めていると勘定が合わなくなるため、
+        表示側がここを参照できるようにしてある。
+        """
+        return {
+            "input": self.input_tokens * spec.input_price / 1_000_000,
+            "output": self.output_tokens * spec.output_price / 1_000_000,
+            "cache_write": self.cache_creation_tokens * spec.cache_write_price / 1_000_000,
+            "cache_read": self.cache_read_tokens * spec.cache_read_price / 1_000_000,
+        }
+
     def cost(self, spec: Any) -> float:
         """モデル価格から概算コスト(USD)を出す。価格未設定なら 0。"""
-        return (
-            self.input_tokens * spec.input_price
-            + self.output_tokens * spec.output_price
-            + self.cache_creation_tokens * spec.cache_write_price
-            + self.cache_read_tokens * spec.cache_read_price
-        ) / 1_000_000
+        return sum(self.cost_breakdown(spec).values())
 
     def summary(self, spec: Any) -> str:
         """端末表示用の1行サマリ。"""
