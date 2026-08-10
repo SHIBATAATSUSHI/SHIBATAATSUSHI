@@ -92,11 +92,15 @@ SEL_SAVE_DRAFT = [
     "text='一時保存'",
     "button:has-text('保存')",
 ]
-# 保存できたことを示す表示
+# 保存できたことを示す表示。短時間で消えるため、クリック直後から拾い続ける。
+# 「下書き保存」ボタン自身に当たらない文字列だけを並べること。
 SEL_SAVED_NOTICE = [
     "text=下書きを保存しました",
-    "text=保存済み",
+    "text=下書きに保存しました",
     "text=保存しました",
+    "text=保存されました",
+    "text=保存済み",
+    "text=保存が完了",
 ]
 # 「複数画面で編集されています。どちらを保存しますか?」の競合ダイアログ。
 # 初期選択は「別の画面」= 古い原稿。放置すると今回の変更が捨てられる。
@@ -1078,6 +1082,29 @@ def _inspect_written(page, article: Article) -> dict | None:
         return None
 
 
+def _leaked_markup(text: str) -> list[str]:
+    """note の本文に、変換されずに残った記法が無いかを見る。"""
+    found = []
+    if "**" in text:
+        found.append("`**`(太字)")
+    if re.search(r"(^|\n)#{1,6}\s", text):
+        found.append("`#`(見出し)")
+    if re.search(r"\]\(https?://", text):
+        found.append("`[text](url)`(リンク)")
+    return found
+
+
+def _leaked_markup_in_source(body: str) -> list[str]:
+    """原稿に、変換対象外の記法が含まれていないかを見る。
+
+    読み戻しは冒頭と末尾しか取らないため、途中に残った記法を取りこぼす。
+    原稿側から、変換されずに素通りする記法を拾っておく。
+    """
+    html = markdown_to_note_html(body)
+    stripped = re.sub(r"<[^>]+>", "", html)
+    return _leaked_markup(stripped)
+
+
 def _report_written(page, article: Article) -> None:
     """読み戻した内容を表示し、明らかにおかしい場合は警告する。"""
     result = _inspect_written(page, article)
@@ -1100,6 +1127,17 @@ def _report_written(page, article: Article) -> None:
         print("  [warn] タイトルが原稿と一致しません。")
     if not result.get("chars"):
         print("  [warn] 本文が空です。貼り付けに失敗しています。")
+
+    # 変換できなかった記法は、文字としてそのまま note に入る。
+    # 太字を変換していなかった時期に、`**強調**` が本文へ残っていた。
+    leaked = _leaked_markup(result.get("head", "") + result.get("tail", ""))
+    if not leaked:
+        leaked = _leaked_markup_in_source(article.body)
+    if leaked:
+        print(
+            f"  [warn] 記法が文字として入っている可能性があります: {', '.join(leaked)}\n"
+            "         note の画面で該当箇所を確認してください。"
+        )
     for tag in ("h2", "h3", "li", "a"):
         key = "links" if tag == "a" else tag
         expected = expected_html.count(f"<{tag}>" if tag != "a" else "<a ")
@@ -1170,14 +1208,14 @@ def _save_draft(
         clicked = False
         print(f"  [warn] 保存ボタンが見つかりません。自動保存を確認します。\n{exc}")
 
-    page.wait_for_timeout(2000)
-    if clicked:
-        _handle_save_conflict(page, shot_dir)
+    # 保存完了の表示はトーストで、数秒で消える。固定待機のあとに1度見るだけだと
+    # 表示と検査がすれ違う。クリック直後から短い間隔で拾い続ける。
+    saved = _poll_for(page, SEL_SAVED_NOTICE, timeout_ms=12000)
 
-    saved = _has_any(page, SEL_SAVED_NOTICE)
-    if not saved:
-        page.wait_for_timeout(3000)
-        saved = _has_any(page, SEL_SAVED_NOTICE)
+    if clicked and _has_any(page, SEL_CONFLICT_DIALOG):
+        _handle_save_conflict(page, shot_dir)
+        saved = _poll_for(page, SEL_SAVED_NOTICE, timeout_ms=8000)
+
     _shot(page, shot_dir, f"{account.key}-draft-saved")
 
     if saved:
@@ -1405,6 +1443,16 @@ def _print_followup(findings: list) -> None:
     else:
         print("  2. 見出し画像を設定する")
         print("  3. 問題なければ note 上で公開する")
+
+
+def _poll_for(page, selectors: list[str], timeout_ms: int = 10000, step_ms: int = 250) -> bool:
+    """短時間で消える表示(トーストなど)を、細かい間隔で拾い続ける。"""
+    deadline = time.monotonic() + timeout_ms / 1000
+    while time.monotonic() < deadline:
+        if _has_any(page, selectors):
+            return True
+        page.wait_for_timeout(step_ms)
+    return False
 
 
 def _has_any(page, selectors: list[str]) -> bool:

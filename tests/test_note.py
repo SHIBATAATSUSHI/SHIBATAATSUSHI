@@ -328,6 +328,34 @@ class LintTest(unittest.TestCase):
             self.assertIn(item, sheet)
 
 
+class LeakedMarkupTest(unittest.TestCase):
+    """変換されずに文字として note へ入った記法を拾えること。
+
+    太字を変換していなかった時期に `**強調**` が本文へ残った。
+    同じ取りこぼしに次回は気づけるようにする。
+    """
+
+    def test_detects_bold_markers(self):
+        self.assertIn("`**`(太字)", note_post._leaked_markup("これは**強調**です"))
+
+    def test_detects_heading_markers(self):
+        self.assertIn("`#`(見出し)", note_post._leaked_markup("## 見出しが文字のまま"))
+
+    def test_detects_raw_link_syntax(self):
+        self.assertIn(
+            "`[text](url)`(リンク)",
+            note_post._leaked_markup("参考 [出典](https://example.org)"),
+        )
+
+    def test_clean_text_is_not_flagged(self):
+        self.assertEqual(note_post._leaked_markup("ふつうの本文です。"), [])
+
+    def test_converted_source_leaves_nothing(self):
+        """変換に対応した記法は、原稿側の検査でも引っかからない。"""
+        body = "## 見出し\n\n**太字**と[リンク](https://example.org)\n\n- 項目"
+        self.assertEqual(note_post._leaked_markup_in_source(body), [])
+
+
 class DoctorReportTest(unittest.TestCase):
     """画面診断の出力。セレクタがズレたときの復旧材料になること。"""
 
