@@ -415,6 +415,15 @@ def markdown_to_note_html(markdown: str) -> str:
 
     対応するのは見出し(## / ###)、引用、箇条書き、番号付きリスト、段落、リンク。
     画像・表・コードブロックには対応しない。
+
+    **1行 = 1段落として扱う。** CommonMark は連続する行を1つの段落に結合するが、
+    ここでは結合しない。note のエディタに段落内改行の概念が無く、Enter が常に
+    新しいブロックを作るため、原稿の1行をそのまま1ブロックに対応させたほうが
+    書き手の見たままになる。実際、
+        制定：2020年11月14日
+        最終改訂：2026年8月4日
+    のような並びを結合すると1行に潰れてしまう。
+    段落を分けたくない文は、原稿側でも1行にまとめること。
     """
     output: list[str] = []
     current_list: str | None = None
@@ -956,7 +965,15 @@ def _resolve_publish(args, article: Article, account: Account) -> bool:
             "  公開まで自動化する場合は config/note_accounts.json で "
             '"allow_publish": true にしてください。'
         )
-    if not args.yes and sys.stdin.isatty():
+    if not args.yes:
+        # 対話できない環境(cron、CI、リダイレクト)では確認を取れない。
+        # 黙って公開してしまわないよう、--yes の明示を必須にする。
+        if not sys.stdin.isatty():
+            raise NotePostError(
+                "対話できない環境では、確認なしに公開できません。\n"
+                f"  対象: 「{article.title}」\n"
+                "  意図した公開であれば --yes を付けてください。"
+            )
         answer = input(f"\n本当に公開しますか? 「{article.title}」 [y/N] → ")
         if answer.strip().lower() not in {"y", "yes"}:
             raise NotePostError("公開を中止しました。")
@@ -1100,30 +1117,49 @@ def _handle_save_conflict(page, shot_dir: Path | None) -> bool:
     return True
 
 
-def _save_draft(page, account: Account, shot_dir: Path | None) -> None:
-    """下書きとして保存し、保存できたことを確認する。"""
+def _save_draft(
+    page, account: Account, shot_dir: Path | None, allow_unverified: bool = False
+) -> None:
+    """下書きとして保存する。保存されたことを確認できなければ中断する。
+
+    保存できていないのに成功と報告すると、呼び出し側がブラウザを閉じて
+    書いた内容が失われる。確認が取れない場合は黙って通さない。
+    """
     print("下書きとして保存しています...")
+    clicked = True
     try:
         _find(page, SEL_SAVE_DRAFT, timeout_ms=10000).click()
     except NotePostError as exc:
-        # note は自動保存も走るため、ボタンが無いこと自体は致命傷ではない
-        print(f"  [warn] 保存ボタンが見つかりません。自動保存に任せます。\n{exc}")
-        page.wait_for_timeout(3000)
-        _shot(page, shot_dir, f"{account.key}-draft-saved")
-        return
+        # note は自動保存も走るため、ボタンが無くても保存されている可能性はある。
+        # ただし「保存された」表示を確認できるまでは成功とみなさない。
+        clicked = False
+        print(f"  [warn] 保存ボタンが見つかりません。自動保存を確認します。\n{exc}")
 
     page.wait_for_timeout(2000)
-    _handle_save_conflict(page, shot_dir)
+    if clicked:
+        _handle_save_conflict(page, shot_dir)
 
-    if _has_any(page, SEL_SAVED_NOTICE):
-        print("  保存を確認しました。")
-    else:
+    saved = _has_any(page, SEL_SAVED_NOTICE)
+    if not saved:
         page.wait_for_timeout(3000)
-        if _has_any(page, SEL_SAVED_NOTICE):
-            print("  保存を確認しました。")
-        else:
-            print("  [warn] 保存された表示を確認できませんでした。画面を目視してください。")
+        saved = _has_any(page, SEL_SAVED_NOTICE)
     _shot(page, shot_dir, f"{account.key}-draft-saved")
+
+    if saved:
+        print("  保存を確認しました。")
+        return
+
+    message = (
+        "保存されたことを確認できませんでした。\n"
+        + ("  保存ボタンも見つかりませんでした。\n" if not clicked else "")
+        + "  この状態でブラウザを閉じると、書いた内容が失われる可能性があります。\n"
+        "  --headed で画面を開き、手動で保存してください。\n"
+        "  確認したうえで続ける場合は --allow-unverified を付けます。\n\n"
+        "  いま画面にあるもの:\n" + _format_elements(_collect_elements(page), limit=8)
+    )
+    if not allow_unverified:
+        raise NotePostError(message)
+    print(f"  [warn] {message}")
 
 
 
@@ -1243,7 +1279,7 @@ def cmd_post(args, accounts: dict[str, Account], default_key: str | None) -> int
             _publish(page, account, article, shot_dir)
             print(f"\n公開しました: {page.url}")
         else:
-            _save_draft(page, account, shot_dir)
+            _save_draft(page, account, shot_dir, args.allow_unverified)
             print(f"\n下書きを保存しました: {editor_url}")
             print(f"  note_url: {editor_url}  ← 原稿の front matter に控えておくと上書きできます")
         _print_followup(findings)
@@ -1316,7 +1352,7 @@ def cmd_update(args, accounts: dict[str, Account], default_key: str | None) -> i
             _publish(page, account, article, shot_dir)
             print(f"\n公開しました: {page.url}")
         else:
-            _save_draft(page, account, shot_dir)
+            _save_draft(page, account, shot_dir, args.allow_unverified)
             print(f"\n下書きを上書き保存しました: {edit_url}")
         _print_followup(findings)
 

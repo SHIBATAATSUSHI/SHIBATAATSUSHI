@@ -166,6 +166,18 @@ class MarkdownToHtmlTest(unittest.TestCase):
     def test_unclosed_list_is_closed_at_end(self):
         self.assertTrue(self.convert("- 最後の項目").endswith("</ul>"))
 
+    def test_each_line_is_its_own_paragraph(self):
+        """1行 = 1段落。CommonMark と違い、連続行を結合しない。
+
+        note のエディタは Enter が常に新しいブロックを作るため、原稿の1行を
+        そのまま1ブロックに対応させる。結合すると
+        「制定：2020年11月14日」「最終改訂：2026年8月4日」のような並びが潰れる。
+        """
+        self.assertEqual(
+            self.convert("制定：2020年11月14日\n最終改訂：2026年8月4日"),
+            "<p>制定：2020年11月14日</p><p>最終改訂：2026年8月4日</p>",
+        )
+
     def test_structure_counts_match_source(self):
         """見出し・リスト・リンクの数が原稿と一致すること。"""
         markdown = "## A\n\n本文\n\n- x\n- y\n\n### B\n\n[l](https://e.org)"
@@ -365,6 +377,21 @@ class CliGuardTest(unittest.TestCase):
     def test_publish_is_blocked_when_not_allowed(self):
         self.assertEqual(
             self.run_cli("post", "--file", str(self.article), "--publish", "--dry-run"), 1
+        )
+
+    def test_publish_requires_yes_when_not_interactive(self):
+        """cron や CI から、確認なしに公開されないこと。"""
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        config["accounts"]["19770104"]["allow_publish"] = True
+        self.config.write_text(json.dumps(config), encoding="utf-8")
+
+        article = write(
+            self.tmp / "pub.md", "---\ntitle: T\npublish: true\n---\n本文です。\n"
+        )
+        # テストは非対話(isatty が False)で走るため、--yes 無しは中断されるはず
+        self.assertEqual(self.run_cli("post", "--file", str(article), "--dry-run"), 1)
+        self.assertEqual(
+            self.run_cli("post", "--file", str(article), "--dry-run", "--yes"), 0
         )
 
     def test_draft_dry_run_succeeds(self):
