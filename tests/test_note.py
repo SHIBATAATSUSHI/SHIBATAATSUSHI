@@ -157,6 +157,23 @@ class MarkdownToHtmlTest(unittest.TestCase):
             '<p>参考 <a href="https://example.org/a">出典</a></p>',
         )
 
+    def test_bold(self):
+        """`**強調**` を変換しないと、アスタリスクが文字として note に入る。"""
+        self.assertEqual(
+            self.convert("これは**重要な点**である。"),
+            "<p>これは<strong>重要な点</strong>である。</p>",
+        )
+
+    def test_bold_inside_list_and_with_link(self):
+        self.assertEqual(
+            self.convert("- **見出し**: [出典](https://e.org)"),
+            '<ul><li><p><strong>見出し</strong>: '
+            '<a href="https://e.org">出典</a></p></li></ul>',
+        )
+
+    def test_lone_asterisks_are_left_alone(self):
+        self.assertEqual(self.convert("2 * 3 = 6"), "<p>2 * 3 = 6</p>")
+
     def test_html_is_escaped(self):
         html = self.convert("<script>alert(1)</script> と A & B")
         self.assertNotIn("<script>", html)

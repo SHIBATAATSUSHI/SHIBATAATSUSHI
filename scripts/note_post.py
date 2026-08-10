@@ -403,10 +403,15 @@ def load_article(path: Path) -> Article:
 
 
 def _inline_md(text: str) -> str:
-    """行内の記法を HTML にする。エスケープしてからリンクを組み立てる。"""
+    """行内の記法を HTML にする。
+
+    エスケープ → 太字 → リンク の順で組み立てる。
+    太字を変換しないと `**強調**` がアスタリスクのまま note に入ってしまう。
+    """
     escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    bolded = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", escaped)
     return re.sub(
-        r"\[([^\]]+)\]\((https?://[^)]+)\)", r'<a href="\2">\1</a>', escaped
+        r"\[([^\]]+)\]\((https?://[^)]+)\)", r'<a href="\2">\1</a>', bolded
     )
 
 
