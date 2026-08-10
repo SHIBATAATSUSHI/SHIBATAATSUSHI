@@ -45,7 +45,7 @@ NOTE_BASE = "https://note.com"
 # 記事の編集画面は editor.note.com 側にある(末尾スラッシュまで含めて必要)
 EDITOR_BASE = "https://editor.note.com"
 LOGIN_URL = f"{NOTE_BASE}/login"
-NEW_NOTE_URL = f"{NOTE_BASE}/notes/new"
+NEW_NOTE_URL = f"{EDITOR_BASE}/new"
 
 # ---------------------------------------------------------------------------
 # セレクタ候補
@@ -980,16 +980,46 @@ def _resolve_publish(args, article: Article, account: Account) -> bool:
     return True
 
 
+def _wait_for_editor(page, timeout_ms: int = 25000) -> bool:
+    """本文欄が現れるまで待つ。
+
+    note.com/notes/new は editor.note.com へ転送され、そこから画面が組み上がる。
+    固定秒数の待機では間に合わないことがあるため、要素の出現そのものを待つ。
+    """
+    deadline = time.monotonic() + timeout_ms / 1000
+    while time.monotonic() < deadline:
+        for selector in SEL_BODY:
+            try:
+                locator = page.locator(selector).first
+                if locator.count() > 0 and locator.is_visible():
+                    return True
+            except Exception:
+                pass
+        page.wait_for_timeout(500)
+    return False
+
+
 def _open_editor(page, account: Account, target_url: str, shot_dir: Path | None):
-    """エディタを開き、ログイン切れを検出する。"""
+    """エディタを開き、ログイン切れと画面の準備を確認する。"""
     page.goto(target_url, wait_until="domcontentloaded")
-    page.wait_for_timeout(3000)
+    page.wait_for_timeout(1500)
     if _is_logged_out(page):
         _shot(page, shot_dir, f"{account.key}-session-expired")
         raise NotePostError(
             f"[{account.key}] ログインセッションが切れています。\n"
             f"  再ログイン: python scripts/note_post.py login "
             f"--account {account.key} --manual"
+        )
+
+    if not _wait_for_editor(page):
+        _shot(page, shot_dir, f"{account.key}-editor-not-ready")
+        raise NotePostError(
+            "エディタの本文欄が現れませんでした。\n"
+            f"  開いたURL: {target_url}\n"
+            f"  実際のURL: {page.url}\n"
+            "  投稿タイプの選択画面など、別の画面に着いている可能性があります。\n"
+            "  状況を採取するには: python scripts/note_post.py doctor\n\n"
+            "  いま画面にあるもの:\n" + _format_elements(_collect_elements(page), limit=10)
         )
 
 
@@ -1488,7 +1518,9 @@ def cmd_doctor(args, accounts: dict[str, Account], default_key: str | None) -> i
 
             print("画面を開いています...")
             page.goto(target_url, wait_until="domcontentloaded")
-            page.wait_for_timeout(5000)
+            page.wait_for_timeout(1500)
+            if not _wait_for_editor(page):
+                print("  [warn] 本文欄が現れませんでした。その時点の画面を採取します。")
 
             if _is_logged_out(page):
                 raise NotePostError(
