@@ -218,6 +218,8 @@ class Article:
     source: Path | None = None
     # 既存記事を上書きする場合の note のURL(またはキー)
     note_url: str | None = None
+    # 見出し画像(サムネ)。front matter の `eyecatch` を解決した絶対パス
+    eyecatch: Path | None = None
 
 
 class NotePostError(RuntimeError):
@@ -372,6 +374,51 @@ def _normalize_tags(value) -> list[str]:
     return [item.strip().lstrip("#") for item in items if item and item.strip().lstrip("#")]
 
 
+# 見出し画像として受け付ける形式と、大きすぎるときに警告する目安。
+# note 側の上限は未確認なので、ここではリポジトリを重くしないための線として使う。
+EYECATCH_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
+EYECATCH_WARN_BYTES = 2 * 1024 * 1024
+
+
+def resolve_eyecatch(value: str, source: Path | None = None) -> Path:
+    """front matter の `eyecatch` を実ファイルのパスへ解決する。
+
+    相対パスはリポジトリルート基準。見つからなければ原稿ファイルからの相対も試す。
+    投稿の途中で気づくより早く落としたいので、ここで存在と形式を確かめる。
+    """
+    written = str(value).strip()
+    if not written:
+        raise NotePostError("eyecatch が空です。画像のパスを書くか、行ごと消してください。")
+
+    candidate = Path(written).expanduser()
+    tried: list[Path] = []
+    if candidate.is_absolute():
+        tried.append(candidate)
+    else:
+        tried.append((REPO_ROOT / candidate).resolve())
+        if source is not None:
+            tried.append((Path(source).resolve().parent / candidate).resolve())
+
+    for path in tried:
+        if path.is_file():
+            break
+    else:
+        detail = "\n".join(f"  - {p}" for p in tried)
+        raise NotePostError(f"見出し画像が見つかりません: {written}\n探した場所:\n{detail}")
+
+    if path.suffix.lower() not in EYECATCH_SUFFIXES:
+        allowed = " / ".join(sorted(EYECATCH_SUFFIXES))
+        raise NotePostError(f"見出し画像の形式に対応していません: {_rel(path)}(対応: {allowed})")
+
+    size = path.stat().st_size
+    if size > EYECATCH_WARN_BYTES:
+        print(
+            f"警告: 見出し画像が大きめです({size / 1024 / 1024:.1f}MB): {_rel(path)}",
+            file=sys.stderr,
+        )
+    return path
+
+
 def load_article(path: Path) -> Article:
     """Markdown ファイルを読み込んで Article にする。
 
@@ -406,6 +453,9 @@ def load_article(path: Path) -> Article:
 
     note_url = meta.get("note_url") or meta.get("note_key")
 
+    eyecatch_value = meta.get("eyecatch") or meta.get("image")
+    eyecatch = resolve_eyecatch(eyecatch_value, path) if eyecatch_value else None
+
     return Article(
         title=str(title),
         body=body,
@@ -414,6 +464,7 @@ def load_article(path: Path) -> Article:
         publish=publish if isinstance(publish, bool) else None,
         source=path,
         note_url=str(note_url) if note_url else None,
+        eyecatch=eyecatch,
     )
 
 
@@ -1310,6 +1361,11 @@ def _print_summary(article: Article, account: Account, publish: bool, mode: str)
     print(f"記事ファイル: {article.source}")
     print(f"タイトル   : {article.title}")
     print(f"タグ       : {', '.join(article.tags) or '(なし)'}")
+    if article.eyecatch:
+        size_kb = article.eyecatch.stat().st_size / 1024
+        print(f"見出し画像 : {_rel(article.eyecatch)} ({size_kb:.0f}KB)")
+    else:
+        print("見出し画像 : (なし)")
     print(f"本文       : {len(article.body)}文字 / {len(article.body.splitlines())}行")
     print(f"保存方法   : {'公開' if publish else '下書き保存'}")
 

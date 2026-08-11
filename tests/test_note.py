@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import sys
 import tempfile
@@ -85,6 +87,65 @@ class FrontMatterTest(unittest.TestCase):
         path = write(self.tmp / "f.md", "本文だけ\n")
         with self.assertRaises(note_post.NotePostError):
             note_post.load_article(path)
+
+
+class EyecatchTest(unittest.TestCase):
+    """見出し画像(サムネ)の front matter。"""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+
+    def _image(self, name: str = "thumb.png", data: bytes = b"\x89PNG\r\n") -> Path:
+        path = self.tmp / name
+        path.write_bytes(data)
+        return path
+
+    def test_absent_key_gives_none(self):
+        path = write(self.tmp / "a.md", "---\ntitle: T\n---\n本文\n")
+        self.assertIsNone(note_post.load_article(path).eyecatch)
+
+    def test_path_relative_to_article(self):
+        """リポジトリ外の原稿でも、原稿からの相対で解決できること。"""
+        image = self._image()
+        path = write(self.tmp / "b.md", "---\ntitle: T\neyecatch: thumb.png\n---\n本文\n")
+        self.assertEqual(note_post.load_article(path).eyecatch, image.resolve())
+
+    def test_path_relative_to_repo_root(self):
+        path = write(
+            self.tmp / "c.md", "---\ntitle: T\neyecatch: images/README.md\n---\n本文\n"
+        )
+        # 拡張子が対象外なので、リポジトリルート基準で解決できたことは例外の中身で分かる
+        with self.assertRaises(note_post.NotePostError) as ctx:
+            note_post.load_article(path)
+        self.assertIn("形式に対応していません", str(ctx.exception))
+
+    def test_missing_file_is_error_before_browser(self):
+        """投稿の途中ではなく、読み込みの時点で落ちること。"""
+        path = write(self.tmp / "d.md", "---\ntitle: T\neyecatch: images/nope.png\n---\n本文\n")
+        with self.assertRaises(note_post.NotePostError) as ctx:
+            note_post.load_article(path)
+        self.assertIn("見つかりません", str(ctx.exception))
+
+    def test_unsupported_suffix_is_error(self):
+        self._image("thumb.gif")
+        path = write(self.tmp / "e.md", "---\ntitle: T\neyecatch: thumb.gif\n---\n本文\n")
+        with self.assertRaises(note_post.NotePostError):
+            note_post.load_article(path)
+
+    def test_empty_value_counts_as_absent(self):
+        """`eyecatch:` を空のまま残しても、画像なしとして扱われること。"""
+        path = write(self.tmp / "f.md", "---\ntitle: T\neyecatch: ''\n---\n本文\n")
+        self.assertIsNone(note_post.load_article(path).eyecatch)
+        with self.assertRaises(note_post.NotePostError):
+            note_post.resolve_eyecatch("   ")
+
+    def test_large_image_warns_but_loads(self):
+        image = self._image("big.png", b"\x89PNG" + b"0" * (note_post.EYECATCH_WARN_BYTES + 1))
+        path = write(self.tmp / "g.md", "---\ntitle: T\neyecatch: big.png\n---\n本文\n")
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            article = note_post.load_article(path)
+        self.assertEqual(article.eyecatch, image.resolve())
+        self.assertIn("大きめ", err.getvalue())
 
 
 class EditUrlTest(unittest.TestCase):

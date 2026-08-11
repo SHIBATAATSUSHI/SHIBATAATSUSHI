@@ -106,6 +106,7 @@ python scripts/note_post.py login --account 19770104 --manual
 title: 記事タイトル
 account: 19770104
 tags: [理学療法士, 生成AI]
+eyecatch: images/2026-08-11-example.png
 publish: false
 # note_url: https://note.com/19770104/n/nxxxxxxxxxxxx   ← 上書きする場合だけ
 ---
@@ -118,10 +119,23 @@ publish: false
 | `title` | タイトル。省略時は本文冒頭の `# 見出し` を使う |
 | `account` | 投稿先アカウントキー。`--account` の方が優先 |
 | `tags` | ハッシュタグ。`[a, b]` でも `- a` でも可 |
+| `eyecatch` | 見出し画像(サムネ)。リポジトリルートからの相対パス。省略可 |
 | `publish` | `true` で公開まで進む(`allow_publish` が必要)。既定は下書き |
 | `note_url` | 上書き先の記事。書いてあると `post` は拒否され `update` に誘導される |
 
 `<!-- -->` で囲んだメモは note に流し込まれない。原稿内に下書きメモを残せる。
+
+### 見出し画像
+
+画像は `images/` に置く(詳細は `images/README.md`)。`eyecatch` に書いたファイルが
+無い・形式が対象外(`.png` / `.jpg` / `.jpeg` / `.webp` 以外)の場合は、**ブラウザを
+起動する前に**エラーで止まる。投稿の途中で気づくより早いため。2MB を超えると警告が出る。
+
+画像の生成は GPT 側の担当。画風の仕様は `docs/note-strategy.md` を正とする。
+
+なお **note への貼り付け自体はまだ未実装**。編集画面のボタンのDOMを実機で採取して
+から実装する(「画面診断」節の `--stage` を参照)。いまは `--dry-run` と実行前表示に
+出るところまで。
 
 ## 3. 公開前チェック
 
