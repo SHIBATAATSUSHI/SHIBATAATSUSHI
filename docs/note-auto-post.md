@@ -226,8 +226,15 @@ python scripts/note_post.py accounts --verify   # 実際にセッションを開
 ```bash
 python scripts/note_post.py doctor                  # 新規作成画面を調べる
 python scripts/note_post.py doctor --url https://note.com/19770104/n/nxxxxx  # 既存記事の編集画面
+python scripts/note_post.py doctor --url <URL> --stage publish  # 公開設定画面(タグ・見出し画像)
 python scripts/note_post.py doctor --headed         # ブラウザを見ながら
 ```
+
+`--stage publish` は「公開に進む」を押して、ハッシュタグと見出し画像がある画面まで進む。
+**投稿ボタンには触れない。** そこに実装を足されないよう、テストで固定してある。
+
+ファイル入力(`input[type=file]`)は `display:none` のことが多いので、
+可視判定を外して採取している。見出し画像のアップロード先を見つけるため。
 
 `diagnostics/` に2つ出力される。
 
@@ -270,7 +277,7 @@ python scripts/note_post.py post --file posts/example.md \
 ## テスト
 
 ブラウザを使わない部分(原稿の解釈、URLの検査、チェッカーの判定、アカウント照合、各ガード)を
-52件のテストで固めてある。Playwright は不要。
+60件のテストで固めてある。Playwright は不要。
 
 ```bash
 python -m unittest discover tests

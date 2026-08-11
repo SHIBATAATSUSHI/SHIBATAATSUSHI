@@ -393,6 +393,32 @@ class DoctorReportTest(unittest.TestCase):
         self.assertIn("見つからなかった定義", report)
 
 
+class DoctorIsReadOnlyTest(unittest.TestCase):
+    """doctor が書き込みも公開もしないことを、コードの形で固定する。
+
+    --stage publish は「公開に進む」を押して公開設定画面まで行く。
+    投稿ボタンまで押す実装をあとから足されると、事故が起きる。
+    """
+
+    def source(self):
+        import inspect
+
+        return inspect.getsource(note_post.cmd_doctor)
+
+    def test_never_touches_publish_button(self):
+        self.assertNotIn("SEL_PUBLISH_CONFIRM", self.source())
+        self.assertNotIn("_publish(", self.source())
+
+    def test_never_writes_content(self):
+        for forbidden in ("_write_article(", "_save_draft(", "set_input_files", ".fill("):
+            self.assertNotIn(forbidden, self.source(), f"doctor が {forbidden} を含む")
+
+    def test_only_click_is_goto_publish(self):
+        clicks = [line for line in self.source().splitlines() if ".click()" in line]
+        self.assertEqual(len(clicks), 1)
+        self.assertIn("SEL_GOTO_PUBLISH", clicks[0])
+
+
 class CliGuardTest(unittest.TestCase):
     """CLI が事故を止めること。いずれも書き込みには進まない。"""
 

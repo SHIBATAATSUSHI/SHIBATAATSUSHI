@@ -135,6 +135,25 @@ SEL_HASHTAG_INPUT = [
     "input[placeholder*='ハッシュタグ']",
     "input[placeholder*='タグ']",
 ]
+# 見出し画像(サムネ)。編集画面のタイトル上にボタンがある。
+# 実物のDOMは未採取のため、当たるまで doctor で確かめる。
+SEL_EYECATCH_BUTTON = [
+    "button:has-text('記事の見出し画像を追加')",
+    "button[aria-label*='見出し画像']",
+    "button:has-text('見出し画像')",
+    "[data-testid*='eyecatch'] button",
+    "[class*='eyecatch'] button",
+]
+SEL_EYECATCH_UPLOAD = [
+    "button:has-text('画像をアップロード')",
+    "text=画像をアップロード",
+    "button:has-text('アップロード')",
+]
+SEL_EYECATCH_CONFIRM = [
+    "button:has-text('保存')",
+    "button:has-text('適用')",
+    "button:has-text('この画像を使用')",
+]
 SEL_PUBLISH_CONFIRM = [
     "button:has-text('投稿する')",
     "button:has-text('公開する')",
@@ -150,6 +169,7 @@ SELECTOR_GROUPS = {
     "SEL_HASHTAG_INPUT": SEL_HASHTAG_INPUT,
     "SEL_PUBLISH_CONFIRM": SEL_PUBLISH_CONFIRM,
     "SEL_UPDATE_PUBLISHED": SEL_UPDATE_PUBLISHED,
+    "SEL_EYECATCH_BUTTON": SEL_EYECATCH_BUTTON,
 }
 # 保存後にしか出ないため、doctor では「なし」で正常
 SELECTOR_GROUPS_TRANSIENT = {
@@ -609,10 +629,19 @@ _COLLECT_ELEMENTS_JS = """
   });
   const pick = (selector, limit) =>
     [...document.querySelectorAll(selector)].filter(visible).slice(0, limit).map(describe);
+  // ファイル入力は display:none のことが多い。可視判定を外さないと取りこぼす。
+  const files = [...document.querySelectorAll('input[type="file"]')]
+    .slice(0, 10)
+    .map((el) => ({
+      ...describe(el),
+      accept: el.getAttribute('accept') || '',
+      hidden: !visible(el),
+    }));
   return {
     buttons: pick('button, [role="button"]', 40),
     inputs: pick('input, textarea', 20),
     editables: pick('[contenteditable="true"]', 10),
+    files,
   };
 }
 """
@@ -632,7 +661,10 @@ def _format_elements(elements: dict, limit: int = 12) -> str:
         return "  (画面の要素を取得できませんでした)"
 
     lines: list[str] = []
-    labels = {"buttons": "ボタン", "inputs": "入力欄", "editables": "編集領域"}
+    labels = {
+        "buttons": "ボタン", "inputs": "入力欄",
+        "editables": "編集領域", "files": "ファイル入力",
+    }
     for kind, label in labels.items():
         items = elements.get(kind) or []
         if not items:
@@ -646,6 +678,10 @@ def _format_elements(elements: dict, limit: int = 12) -> str:
                 parts.append(f"placeholder={item['placeholder']}")
             if item.get("testid"):
                 parts.append(f"data-testid={item['testid']}")
+            if item.get("accept"):
+                parts.append(f"accept={item['accept']}")
+            if item.get("hidden"):
+                parts.append("(非表示)")
             if item.get("cls"):
                 parts.append(f"class={item['cls']}")
             lines.append("    - " + " ".join(parts))
@@ -1496,19 +1532,28 @@ def _doctor_report(page, account: Account, target_url: str, verified: str | None
         lines.append(f"| `{name}` | {'`' + hit + '`' if hit else '**なし**'} |")
 
     lines += ["", "## 画面にある要素", ""]
-    labels = {"buttons": "ボタン", "inputs": "入力欄", "editables": "編集領域"}
+    labels = {
+        "buttons": "ボタン", "inputs": "入力欄",
+        "editables": "編集領域", "files": "ファイル入力",
+    }
     for kind, label in labels.items():
         items = elements.get(kind) or []
         lines += [f"### {label}({len(items)}件)", ""]
         if not items:
             lines += ["(なし)", ""]
             continue
-        lines += ["| tag | text | placeholder | data-testid | class |", "| --- | --- | --- | --- | --- |"]
+        lines += [
+            "| tag | text | placeholder / accept | data-testid | class |",
+            "| --- | --- | --- | --- | --- |",
+        ]
         for item in items:
+            hint = item.get("placeholder", "") or item.get("accept", "")
+            if item.get("hidden"):
+                hint += " (非表示)"
             cells = [
                 item.get("tag", ""),
                 item.get("text", "").replace("|", "/").replace("\n", " "),
-                item.get("placeholder", "").replace("|", "/"),
+                hint.replace("|", "/"),
                 item.get("testid", ""),
                 item.get("cls", "").replace("|", "/"),
             ]
@@ -1574,6 +1619,17 @@ def cmd_doctor(args, accounts: dict[str, Account], default_key: str | None) -> i
             page.wait_for_timeout(1500)
             if not _wait_for_editor(page):
                 print("  [warn] 本文欄が現れませんでした。その時点の画面を採取します。")
+
+            if args.stage == "publish":
+                # 公開設定画面(ハッシュタグと見出し画像がある)を見に行く。
+                # ここで押すのは「公開に進む」だけ。投稿ボタンには触れない。
+                print("公開設定画面へ進みます(投稿はしません)...")
+                try:
+                    _find(page, SEL_GOTO_PUBLISH, timeout_ms=10000).click()
+                    page.wait_for_timeout(4000)
+                    print(f"  遷移先: {page.url}")
+                except NotePostError as exc:
+                    print(f"  [warn] 「公開に進む」が見つかりません。\n{exc}")
 
             if _is_logged_out(page):
                 raise NotePostError(
@@ -1762,6 +1818,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_doctor.add_argument("--account", help="アカウントキー")
     p_doctor.add_argument("--url", help="既存記事の編集画面を調べる場合のURL")
+    p_doctor.add_argument(
+        "--stage",
+        choices=["editor", "publish"],
+        default="editor",
+        help="editor は編集画面、publish は「公開に進む」の先の画面を調べる"
+        "(ハッシュタグと見出し画像がある画面。投稿はしない)",
+    )
     p_doctor.add_argument(
         "--out", type=Path, default=REPO_ROOT / "diagnostics", help="診断結果の出力先"
     )
