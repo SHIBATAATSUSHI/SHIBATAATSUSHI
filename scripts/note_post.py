@@ -1044,6 +1044,22 @@ def _wait_for_editor(page, timeout_ms: int = 25000) -> bool:
     return False
 
 
+def _wait_for_publish_screen(page, timeout_ms: int = 20000) -> bool:
+    """公開設定画面へ切り替わるまで待つ。
+
+    「公開に進む」を押すと URL が /edit/ から /publish/ に変わり、そのあと
+    ハッシュタグ欄などが組み上がる。固定待機だと遷移前の画面を撮ってしまう。
+    """
+    deadline = time.monotonic() + timeout_ms / 1000
+    while time.monotonic() < deadline:
+        if "/publish" in page.url:
+            # URL が変わっただけでは中身が揃っていない。入力欄の出現まで待つ。
+            if _has_any(page, SEL_HASHTAG_INPUT):
+                return True
+        page.wait_for_timeout(400)
+    return "/publish" in page.url
+
+
 def _open_editor(page, account: Account, target_url: str, shot_dir: Path | None):
     """エディタを開き、ログイン切れと画面の準備を確認する。"""
     page.goto(target_url, wait_until="domcontentloaded")
@@ -1626,7 +1642,9 @@ def cmd_doctor(args, accounts: dict[str, Account], default_key: str | None) -> i
                 print("公開設定画面へ進みます(投稿はしません)...")
                 try:
                     _find(page, SEL_GOTO_PUBLISH, timeout_ms=10000).click()
-                    page.wait_for_timeout(4000)
+                    # /edit/ から /publish/ へ遷移する。固定待機だと遷移前を撮ってしまう。
+                    if not _wait_for_publish_screen(page):
+                        print("  [warn] 公開設定画面に切り替わりませんでした。")
                     print(f"  遷移先: {page.url}")
                 except NotePostError as exc:
                     print(f"  [warn] 「公開に進む」が見つかりません。\n{exc}")
