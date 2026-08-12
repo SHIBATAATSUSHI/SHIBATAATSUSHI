@@ -141,6 +141,14 @@ cd ~/SHIBATAATSUSHI
 ls ~/.claude/projects/
 ```
 
+**先にワークスペース信頼を通しておくこと。** 未承認のディレクトリは launchd 下で信頼ダイアログを出せずに即死し、`KeepAlive` による再起動を延々と繰り返す。各ディレクトリで一度 `claude` を起動して承認する:
+
+```bash
+cd ~/SHIBATAATSUSHI && claude
+```
+
+承認したら `Ctrl+C` で抜ける。スクリプトは `~/.claude/projects/` を見て未承認の疑いがあれば警告する。
+
 登録する:
 
 ```bash
@@ -148,6 +156,8 @@ ls ~/.claude/projects/
 ./scripts/setup-remote-control.sh ~/Documents/investment-dashboard "投資"
 ./scripts/setup-remote-control.sh ~/Documents/shibata-os "shibata-os"
 ```
+
+> `--list` の「稼働中」は起動に失敗して再起動を繰り返している状態でも出ることがある。登録時に `✗` が出たらエラーログを信じること。
 
 一覧と解除:
 

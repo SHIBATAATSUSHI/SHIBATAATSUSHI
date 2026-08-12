@@ -126,6 +126,20 @@ echo "表示名          : $NAME"
 echo "ラベル          : $LABEL"
 echo
 
+# ワークスペース信頼の事前確認。未承認だと launchd 下では信頼ダイアログを
+# 出せずに即死し、KeepAlive による再起動を延々と繰り返す。
+# ~/.claude/projects/ にはパスの / を - に置き換えたディレクトリができる。
+PROJECT_KEY="$(printf '%s' "$WORKDIR" | sed 's|/|-|g')"
+if [ ! -d "$HOME/.claude/projects/$PROJECT_KEY" ]; then
+  echo "警告: このディレクトリで claude をまだ起動していない可能性があります。"
+  echo "      未承認だと「Workspace not trusted」で起動できません。先にこれを実行してください:"
+  echo
+  echo "        cd \"$WORKDIR\" && claude"
+  echo
+  echo "      (信頼ダイアログを承認したら Ctrl+C で抜けて、このスクリプトを再実行)"
+  echo
+fi
+
 mkdir -p "$LA_DIR" "$LOGDIR"
 
 # 同じラベルが既に登録済みなら一度外す(未登録のときのエラーは無視する)
@@ -169,11 +183,23 @@ if launchctl print "gui/$UID_NUM/$LABEL" 2>/dev/null | grep -qE '^[[:space:]]*st
   echo "  「ディレクトリを選択」に $WORKDIR が並びます。"
   echo "  (右下の「+ 新規セッション」はクラウドセッションを作るので別物です)"
 else
-  echo "✗ 起動していないようです。ログを確認してください:"
+  echo "✗ 起動していないようです。エラーログ:"
   echo
   tail -20 "$LOGDIR/$LABEL.err.log" 2>/dev/null || echo "  (エラーログはまだありません)"
   echo
-  echo "  端末(TTY)を要求するエラーが出ている場合は、tmux を噛ませる必要があります。"
-  echo "  docs/mac-mobile-sync-guide.md の「動かないとき」を参照してください。"
+  if grep -q "not trusted" "$LOGDIR/$LABEL.err.log" 2>/dev/null; then
+    echo "  → ワークスペースが未承認です。次を実行して信頼ダイアログを承認してから、"
+    echo "     このスクリプトを再実行してください:"
+    echo
+    echo "       cd \"$WORKDIR\" && claude"
+    echo
+    echo "     承認したら Ctrl+C で抜けて再実行します。"
+  else
+    echo "  → 端末(TTY)を要求するエラーが出ている場合は、tmux を噛ませる必要があります。"
+    echo "     docs/mac-mobile-sync-guide.md の「動かないとき」を参照してください。"
+  fi
+  echo
+  echo "  なお KeepAlive により60秒ごとに再起動を試みるため、--list には一時的に"
+  echo "  「稼働中」と出ることがあります。実態はエラーログを見て判断してください。"
   exit 1
 fi
