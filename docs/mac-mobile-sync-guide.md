@@ -141,6 +141,10 @@ cd ~/SHIBATAATSUSHI
 launchctl bootout gui/$(id -u)/com.shibata.claude-rc
 ```
 
+#### 成功したときの見え方
+
+ケータイの Code タブの **「デバイス」欄に Mac が緑の点付きで出る**(常駐前は「最近接続したデバイスはありません」と表示される場所)。ここが出れば、右下の「+ 新規セッション」から Mac 上の作業を起こせる。
+
 #### 動かないとき
 
 ログを見る:
@@ -148,6 +152,8 @@ launchctl bootout gui/$(id -u)/com.shibata.claude-rc
 ```bash
 tail -20 ~/Library/Logs/claude-rc.err.log
 ```
+
+> 2026-08 に MacBook Pro / Claude Code v2.1.228 で検証したときは、launchd 直下でそのまま起動した。以下は転けた場合の保険。
 
 launchd の下には端末(TTY)が無いため、サーバーモードが端末を要求して起動しない可能性がある。その場合だけ `tmux` を噛ませて疑似端末を与える:
 
