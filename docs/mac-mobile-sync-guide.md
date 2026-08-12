@@ -129,16 +129,42 @@ cd ~/SHIBATAATSUSHI
 ./scripts/setup-remote-control.sh
 ```
 
-既に clone 済みなら `git clone` は失敗するので、代わりに `cd ~/SHIBATAATSUSHI && git pull` で更新する。作業ディレクトリと表示名を変えたいときは引数で渡す:
+既に clone 済みなら `git clone` は失敗するので、代わりに `cd ~/SHIBATAATSUSHI && git pull` で更新する。
+
+#### プロジェクトごとに登録する
+
+引数で作業ディレクトリと表示名を渡すと、**プロジェクトごとに別々の常駐を登録できる**。ラベルは作業ディレクトリ名から自動で導出されるので衝突しない。触るプロジェクトを全部登録しておくと、ケータイのディレクトリ選択にまとめて並ぶ。
+
+対象の洗い出しは、Claude Code で開いたことのあるフォルダの一覧から:
 
 ```bash
-./scripts/setup-remote-control.sh ~/work "仕事Mac"
+ls ~/.claude/projects/
 ```
 
-止めたいときは:
+登録する:
+
+```bash
+./scripts/setup-remote-control.sh ~/SHIBATAATSUSHI "SHIBATAATSUSHI"
+./scripts/setup-remote-control.sh ~/Documents/investment-dashboard "投資"
+./scripts/setup-remote-control.sh ~/Documents/shibata-os "shibata-os"
+```
+
+一覧と解除:
+
+```bash
+./scripts/setup-remote-control.sh --list
+./scripts/setup-remote-control.sh --remove investment-dashboard
+```
+
+> 常駐が増えるとメモリと接続数を食う。実際に触るものだけに絞り、使わなくなったら `--remove` で外す。
+
+#### 旧ラベルの後始末
+
+2026-08 の初版スクリプトはラベルを `com.shibata.claude-rc` に固定していた。当時登録したものが残っていると、同じディレクトリの常駐が二重に立つ。`--list` に出てくるので、一度だけ外しておく:
 
 ```bash
 launchctl bootout gui/$(id -u)/com.shibata.claude-rc
+rm ~/Library/LaunchAgents/com.shibata.claude-rc.plist
 ```
 
 #### 成功したときの見え方と、ケータイからの入口
@@ -170,7 +196,7 @@ launchd の下には端末(TTY)が無いため、サーバーモードが端末�
 brew install tmux
 ```
 
-`~/Library/LaunchAgents/com.shibata.claude-rc.plist` の `exec claude remote-control ...` の行を次に差し替えて再登録する:
+該当する plist(`--list` で出るラベルに対応する `~/Library/LaunchAgents/com.shibata.claude-rc-<スラッグ>.plist`)の `exec claude remote-control ...` の行を次に差し替えて再登録する:
 
 ```
 exec tmux new -s cc "claude remote-control --name MacBook"
@@ -265,11 +291,11 @@ Remote Control が切れている状態でも文脈を渡すための仕組み�
 
 ## よく使う導線
 
-常駐の状態を見る / 止める:
+常駐の一覧を見る / 個別に解除する:
 
 ```bash
-launchctl print gui/$(id -u)/com.shibata.claude-rc | head -20
-launchctl bootout gui/$(id -u)/com.shibata.claude-rc
+./scripts/setup-remote-control.sh --list
+./scripts/setup-remote-control.sh --remove <スラッグ>
 ```
 
 Mac のローカル作業をケータイに繋ぐ(都度):
