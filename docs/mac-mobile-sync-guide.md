@@ -31,11 +31,12 @@ iPhone の Claude Code(claude.ai/code / Claude アプリ)で新しく開ける�
 - 連携手段は Remote Control 一択
 - どのフォルダで起動しても全機能が使えるので、`remoteControlAtStartup: true` の常時 on が効く
 
-## 3つの連携手段と使い分け
+## 連携手段と使い分け
 
 | 手段 | Claude が動く場所 | ケータイから触れる範囲 | Mac の状態 |
 |---|---|---|---|
-| **Remote Control** | Mac | ローカル全部(claude-mem・自作スキル・Obsidian も) | 起動+ネット接続が必要 |
+| **Remote Control(常駐)** | Mac | ローカル全部。ケータイから新規セッションも起こせる | 起動+ネット接続が必要 |
+| **Remote Control(都度)** | Mac | ローカル全部。Mac 側で起こしたセッションに入るだけ | 同上 |
 | **クラウドセッション** | クラウド VM | GitHub にあるリポジトリのみ | 不要(寝てても動く) |
 | **Dispatch** | Mac(デスクトップアプリ) | ローカル全部 | 起動が必要 |
 
@@ -61,13 +62,7 @@ iPhone の Claude Code(claude.ai/code / Claude アプリ)で新しく開ける�
 
 単発でやるなら、セッション中に `/remote-control`(`/rc`)。QR コードが出るのでケータイで読み取ればそのまま繋がる。
 
-**制約**: ローカルプロセスが生きている間だけ。ターミナルを閉じる/Mac をスリープさせると切れる。外出中も維持したいなら `tmux` 内で起動する:
-
-```bash
-tmux new -s cc
-cd ~/claude/claudecode && claude --remote-control
-# Ctrl+B → D で切り離す(プロセスは生き続ける)
-```
+**制約**: ローカルプロセスが生きている間だけ。ターミナルを閉じると切れる。打たなくても常に繋がっている状態にしたいなら、次章の常駐化を行う。
 
 **過去のローカルセッションはケータイに出ない**(重要):
 
@@ -99,16 +94,98 @@ claude --resume        # 一覧から続きをやりたい会話を選ぶ
 
 つまり「履歴が自動同期される」のではなく「ケータイに出したい会話を Mac 側で1つ選んで送り出す」という操作モデル。ケータイ側から新規セッションを何個も起こしたいなら、サーバーモード `claude remote-control` を使う。
 
-### 2. プッシュ通知を on にする(Mac 側)
+### 2. 常駐させて自動で繋がるようにする(Mac 側・1回だけ)
 
-Claude Code 内で `/config` →
+`remoteControlAtStartup` は「`claude` と打ったとき」に繋がる設定であって、打たなければ何も起きない。**何もしなくても常にケータイから見える**状態にするには、macOS の常駐機構 launchd に **サーバーモード**を登録する。
 
-- **Push when Claude decides** — 長い作業が終わったら通知
-- **Push when actions required** — 許可を求めるときに通知
+`claude --remote-control`(通常)と `claude remote-control`(サーバーモード)は別物:
 
-これで「Mac で走らせて、終わったらケータイに通知が来て、そのまま続きをケータイで見る」が成立する。
+| | `claude --remote-control` | `claude remote-control`(サーバー) |
+|---|---|---|
+| 起動 | 打つたび | ログイン時に自動、常駐 |
+| ケータイから新規セッション | 作れない(Mac 側で起こしたものに入るだけ) | **作れる** |
+| 同時セッション数 | 1 | 最大32 |
+| 落ちたとき | 手で再起動 | 自動で復活 |
 
-### 3. Mac がオフでも触りたいものは GitHub に置く
+サーバーモードにすると、**iPhone の「新規セッション」から Mac 上の作業を起こせる**ようになる。これがローカル連携の完成形。
+
+#### 手順
+
+まず前面で動くことを確認する(ここで動かなければ常駐化しても動かない):
+
+```bash
+cd ~/claude/claudecode
+claude remote-control --name "MacBook"   # 動いたら Ctrl+C で止める
+```
+
+確認できたらセットアップスクリプトを実行する。LaunchAgent の作成・登録・状態確認まで行う:
+
+```bash
+# このリポジトリを Mac に置いていなければ先に clone する
+git clone https://github.com/SHIBATAATSUSHI/SHIBATAATSUSHI.git ~/SHIBATAATSUSHI
+
+cd ~/SHIBATAATSUSHI
+./scripts/setup-remote-control.sh
+# 別の場所・名前にするなら: ./scripts/setup-remote-control.sh ~/work "仕事Mac"
+```
+
+止めたいときは:
+
+```bash
+launchctl bootout gui/$(id -u)/com.shibata.claude-rc
+```
+
+#### 動かないとき
+
+ログを見る:
+
+```bash
+tail -20 ~/Library/Logs/claude-rc.err.log
+```
+
+launchd の下には端末(TTY)が無いため、サーバーモードが端末を要求して起動しない可能性がある。その場合だけ `tmux` を噛ませて疑似端末を与える:
+
+```bash
+brew install tmux
+```
+
+`~/Library/LaunchAgents/com.shibata.claude-rc.plist` の `exec claude remote-control ...` の行を次に差し替えて再登録する:
+
+```
+exec tmux new -s cc "claude remote-control --name MacBook"
+```
+
+> tmux は「ターミナルを閉じてもプロセスが死なない仮想画面」を作るツール。本来は手で起動するものなので自動化には向かないが、ここでは疑似端末を用意する目的だけに使う。
+
+#### 常駐でも解決しないこと
+
+- **スリープ中は使えない**。復帰時に自動再接続はするが、蓋を閉じている間はケータイから触れない。外出中も使うなら電源接続＋蓋を開けたまま、または `caffeinate -s` で包む。
+- **起きているのにネット断が約10分続くとプロセスが落ちる**。ただし `KeepAlive` により自動で復活するので、常駐させておけば実害は小さい。
+- 蓋を閉じて持ち歩く運用なら、そもそも Remote Control ではなくクラウドセッション側に寄せる。
+
+### 3. プッシュ通知を on にする(Mac + iPhone)
+
+通知は4段構えで、どれか1つ欠けても届かない。
+
+1. **iPhone に Claude アプリが入っている**(導入済み)
+2. **Mac と同じアカウントでサインインしている**(済み)
+3. **iOS 側で通知を許可している** — 設定 → 通知 → Claude →「通知を許可」on。集中モードと時刻指定要約の対象から外す
+4. **Mac の Claude Code で `/config`**:
+   - `Push when Claude decides` — 長い作業が終わったら通知
+   - `Push when actions required` — 許可待ち・質問のときに通知
+
+#### 検証するときの注意
+
+**ターミナルを触っている間、通知は仕様上抑制される**(「端末の前にいるなら通知は不要」という設計)。机で試すと届かないので「壊れている」と誤認しやすい。
+
+長めのタスクを投げてから、**別アプリにフォーカスを移して**待つこと。
+
+#### 届かないとき
+
+- `/config` に `No mobile registered` と出る → iPhone で Claude アプリを一度開く(プッシュトークンが更新される)。次に Remote Control が繋がったときに解消する
+- iOS の集中モード・通知要約に飲まれていないか確認する
+
+### 4. Mac がオフでも触りたいものは GitHub に置く
 
 Mac を閉じた状態でも触りたい**普通のコード・文章**は、private リポジトリとして GitHub に上げればケータイ単独で開ける:
 
@@ -124,14 +201,18 @@ gh repo create <名前> --private --source=. --push
 
 ただし `claudecode` は前述のとおりこれでは解決しない。ローカル資産に依存するものと、単なるコード・文章は分けて考える。
 
-### 4. 引き継ぎメモ(`/handoff`)
+### 5. 引き継ぎメモ(`/handoff`)
 
 Remote Control が切れている状態でも文脈を渡すための仕組み。作業の区切りで `/handoff` と打つと `docs/handoff.md` に「今どこまで/次に何を」が書かれて push される。次にどの端末で開いても、最初に `/handoff` と打てば続きから入れる。詳細は `.claude/skills/handoff/SKILL.md`。
 
 ## よく使う導線
 
 ```bash
-# Mac のローカル作業をケータイに繋ぐ
+# 常駐の状態を見る / 止める
+launchctl print gui/$(id -u)/com.shibata.claude-rc | head -20
+launchctl bootout gui/$(id -u)/com.shibata.claude-rc
+
+# Mac のローカル作業をケータイに繋ぐ(都度)
 claude --remote-control
 
 # Mac から「クラウドで走らせておく」(ケータイで結果を見る)
