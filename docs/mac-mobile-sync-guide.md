@@ -88,9 +88,10 @@ claude --remote-control "claudecode"   # 起動時に付ける
 
 ```bash
 cd ~/claude/claudecode
-claude --resume        # 一覧から続きをやりたい会話を選ぶ
-# 開いたら中で /rc
+claude --resume
 ```
+
+一覧から続きをやりたい会話を選び、開いたら中で `/rc` と打つ。
 
 つまり「履歴が自動同期される」のではなく「ケータイに出したい会話を Mac 側で1つ選んで送り出す」という操作モデル。ケータイ側から新規セッションを何個も起こしたいなら、サーバーモード `claude remote-control` を使う。
 
@@ -111,22 +112,27 @@ claude --resume        # 一覧から続きをやりたい会話を選ぶ
 
 #### 手順
 
-まず前面で動くことを確認する(ここで動かなければ常駐化しても動かない):
+> **貼り付けの注意**: 対話シェルの zsh は `#` をコメントとして扱わない(既定で `interactive_comments` が off)。以下のコード欄に説明用のコメントを書いていないのはそのため。コメント付きの行をターミナルに貼ると `command not found: #` になる。
+
+まず前面で動くことを確認する。ここで動かなければ常駐化しても動かない。QR コードが出たら `Ctrl+C` で止めてよい。
 
 ```bash
 cd ~/claude/claudecode
-claude remote-control --name "MacBook"   # 動いたら Ctrl+C で止める
+claude remote-control --name "MacBook"
 ```
 
-確認できたらセットアップスクリプトを実行する。LaunchAgent の作成・登録・状態確認まで行う:
+確認できたらリポジトリを最新にして、セットアップスクリプトを実行する。LaunchAgent の作成・登録・状態確認まで行う。
 
 ```bash
-# このリポジトリを Mac に置いていなければ先に clone する
 git clone https://github.com/SHIBATAATSUSHI/SHIBATAATSUSHI.git ~/SHIBATAATSUSHI
-
 cd ~/SHIBATAATSUSHI
 ./scripts/setup-remote-control.sh
-# 別の場所・名前にするなら: ./scripts/setup-remote-control.sh ~/work "仕事Mac"
+```
+
+既に clone 済みなら `git clone` は失敗するので、代わりに `cd ~/SHIBATAATSUSHI && git pull` で更新する。作業ディレクトリと表示名を変えたいときは引数で渡す:
+
+```bash
+./scripts/setup-remote-control.sh ~/work "仕事Mac"
 ```
 
 止めたいときは:
@@ -207,17 +213,27 @@ Remote Control が切れている状態でも文脈を渡すための仕組み�
 
 ## よく使う導線
 
+常駐の状態を見る / 止める:
+
 ```bash
-# 常駐の状態を見る / 止める
 launchctl print gui/$(id -u)/com.shibata.claude-rc | head -20
 launchctl bootout gui/$(id -u)/com.shibata.claude-rc
+```
 
-# Mac のローカル作業をケータイに繋ぐ(都度)
+Mac のローカル作業をケータイに繋ぐ(都度):
+
+```bash
 claude --remote-control
+```
 
-# Mac から「クラウドで走らせておく」(ケータイで結果を見る)
+Mac から「クラウドで走らせておく」(ケータイで結果を見る):
+
+```bash
 claude --cloud "docs/impulse-definitions.md に神経科学の章を追加して"
+```
 
-# ケータイで進めたクラウドセッションを Mac のターミナルに引き取る
+ケータイで進めたクラウドセッションを Mac のターミナルに引き取る:
+
+```bash
 claude --teleport
 ```
