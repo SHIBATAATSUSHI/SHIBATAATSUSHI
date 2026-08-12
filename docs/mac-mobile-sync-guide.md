@@ -70,7 +70,16 @@ cd ~/claude/claudecode && claude --remote-control
 - クラウドセッション(GitHub リポジトリのもの)
 - **今この瞬間** Remote Control で繋がっている生きたセッション
 
-繋がっているセッションは `MacBook-Pro-SA-` で始まる自動生成名で、パソコンのアイコン+緑の点が付く。
+繋がっているセッションはノート PC のアイコンと緑の「接続済み」が付く。クラウドセッションのほうは `☁ SHIBATAATSUSHI/SHIBATAATSUSHI` と表示されるので、そこで見分ける。
+
+自動生成名(`macbook-pro-sa-local-imperative-…`)は一覧で切れて読めないので、名前を付けておく:
+
+```bash
+claude --remote-control "claudecode"   # 起動時に付ける
+```
+```
+/rename claudecode                     # 起動後に付け直す
+```
 
 過去の会話をケータイで続けたいときは、**Mac 側で開き直してから送り出す**:
 
