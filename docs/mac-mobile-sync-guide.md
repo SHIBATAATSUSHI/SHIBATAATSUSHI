@@ -7,8 +7,10 @@ iPhone の Claude Code(claude.ai/code / Claude アプリ)で新しく開ける�
 | サイドバーの項目 | 実体 | iPhone から新規に開けるか |
 |---|---|---|
 | `SHIBATAATSUSHI` | GitHub リポジトリ (`SHIBATAATSUSHI/SHIBATAATSUSHI`) | ○ |
-| `claudecode` | Mac 上のローカルフォルダ | ×(GitHub に無いため) |
-| `docs` | Mac 上のローカルフォルダ | ×(同上) |
+| `claudecode` | `/Users/atsushi/claude/claudecode`(git 管理外のローカルフォルダ) | ×(GitHub に無いため) |
+| `docs` | `/Users/atsushi/Documents/shibata-os/docs` | ×(同上) |
+
+> サイドバーの表示名はフォルダ名の末尾だけ。`docs` のように一般的な名前が並ぶのはそのため。
 
 つまり「`claudecode` でしかやれないことがある」のは事実(ローカルのファイル・MCP サーバー・アプリを触れる)だが、**iPhone に出てこない理由は能力差ではなく置き場所の問題**。
 
@@ -55,10 +57,10 @@ Claude Code 内で `/config` →
 
 ### 3. Mac がオフでも触りたいものは GitHub に置く
 
-`claudecode` をケータイ単独で触りたいなら、private リポジトリとして GitHub に上げる:
+`claudecode` は git 管理外のローカルフォルダ(2026-08 時点で確認済み)。ケータイ単独で触りたいなら、private リポジトリとして GitHub に上げる:
 
 ```bash
-cd ~/claudecode
+cd ~/claude/claudecode
 git init && git add -A && git commit -m "初期コミット"
 gh repo create claudecode --private --source=. --push
 ```
