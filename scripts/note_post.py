@@ -1580,11 +1580,28 @@ def _has_any(page, selectors: list[str]) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _doctor_report(page, account: Account, target_url: str, verified: str | None) -> str:
+def _looks_like_skeleton(elements: dict) -> bool:
+    """エディタが組み上がる前の骨組みを撮ってしまっていないか。
+
+    note のエディタはヘッドレスだと描画が進まず、テキストの無いボタンが数個
+    残るだけになる。入力欄も編集領域も無い状態は、UI変更ではなくこれを疑う。
+    """
+    if not elements:
+        return True
+    if elements.get("inputs") or elements.get("editables"):
+        return False
+    buttons = elements.get("buttons") or []
+    return all(not (b.get("text") or "").strip() for b in buttons)
+
+
+def _doctor_report(
+    page, account: Account, target_url: str, verified: str | None, headed: bool = True
+) -> str:
     """画面の実物とセレクタの当たり外れを Markdown にまとめる。"""
     matches = _match_selector_groups(page)
     missing = [name for name, hit in matches if hit is None]
     elements = _collect_elements(page)
+    skeleton = _looks_like_skeleton(elements)
 
     lines = [
         "# note 画面診断",
@@ -1594,7 +1611,21 @@ def _doctor_report(page, account: Account, target_url: str, verified: str | None
         f"- 開いたURL: {target_url}",
         f"- 実際のURL: {page.url}",
         f"- ログイン照合: {verified or '判定不能'}",
+        f"- ブラウザ: {'表示あり (--headed)' if headed else 'ヘッドレス'}",
         "",
+    ]
+    if skeleton:
+        lines += [
+            "> **この採取は使えない。** 入力欄も編集領域も取れておらず、"
+            "エディタが組み上がる前の骨組みを撮っている。",
+            ">",
+            "> note のエディタはヘッドレスでは描画が進まない。"
+            + ("`--headed` を付けて撮り直すこと。" if not headed else
+               "表示ありでこうなる場合は、note 側のUI変更を疑う。"),
+            "",
+        ]
+
+    lines += [
         "## セレクタの当たり外れ",
         "",
         "| 定義 | 当たった候補 |",
@@ -1633,7 +1664,15 @@ def _doctor_report(page, account: Account, target_url: str, verified: str | None
         lines.append("")
 
     lines += ["## 次にやること", ""]
-    if missing:
+    if skeleton:
+        lines += [
+            "セレクタは触らない。**まず撮り直す。**",
+            "",
+            "```bash",
+            f"python scripts/note_post.py doctor --url {target_url} --headed",
+            "```",
+        ]
+    elif missing:
         lines += [
             f"見つからなかった定義が {len(missing)} 件ある: "
             + ", ".join(f"`{name}`" for name in missing),
@@ -1691,6 +1730,11 @@ def cmd_doctor(args, accounts: dict[str, Account], default_key: str | None) -> i
             page.wait_for_timeout(1500)
             if not _wait_for_editor(page):
                 print("  [warn] 本文欄が現れませんでした。その時点の画面を採取します。")
+                if not args.headed:
+                    print(
+                        "  note のエディタはヘッドレスでは組み上がりません。"
+                        "--headed を付けて撮り直してください。"
+                    )
 
             if args.stage == "publish":
                 # 公開設定画面(ハッシュタグと見出し画像がある)を見に行く。
@@ -1712,7 +1756,7 @@ def cmd_doctor(args, accounts: dict[str, Account], default_key: str | None) -> i
                     f"--account {account.key} --manual"
                 )
 
-            report = _doctor_report(page, account, target_url, verified)
+            report = _doctor_report(page, account, target_url, verified, args.headed)
             shot_path = out_dir / f"doctor-{stamp}.png"
             try:
                 page.screenshot(path=str(shot_path), full_page=True)

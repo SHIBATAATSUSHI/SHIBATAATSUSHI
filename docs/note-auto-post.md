@@ -238,11 +238,20 @@ python scripts/note_post.py accounts --verify   # 実際にセッションを開
 初回セットアップ時と、投稿が要素不足で失敗したときに使う。
 
 ```bash
-python scripts/note_post.py doctor                  # 新規作成画面を調べる
-python scripts/note_post.py doctor --url https://note.com/19770104/n/nxxxxx  # 既存記事の編集画面
-python scripts/note_post.py doctor --url <URL> --stage publish  # 公開設定画面(タグ・見出し画像)
-python scripts/note_post.py doctor --headed         # ブラウザを見ながら
+python scripts/note_post.py doctor --headed         # 新規作成画面を調べる
+python scripts/note_post.py doctor --url https://note.com/19770104/n/nxxxxx --headed
+python scripts/note_post.py doctor --url <URL> --stage publish --headed  # 公開設定画面
 ```
+
+### `--headed` を必ず付ける
+
+**note のエディタはヘッドレスでは組み上がらない。** ヘッドレスで撮ると、テキストの
+無いボタンが数個残るだけの骨組みが採取され、セレクタが全滅したように見える。
+これを「note のUIが変わった」と読み違えると、当たるはずの定義を書き換えてしまう。
+
+その状態を検出したときは、レポートの冒頭に「**この採取は使えない**」と出て、
+「次にやること」も撮り直しの案内に切り替わる(セレクタを直せとは言わない)。
+`update` / `post` も同じ理由で `--headed` を付けて実行している。
 
 `--stage publish` は「公開に進む」を押して、ハッシュタグと見出し画像がある画面まで進む。
 **投稿ボタンには触れない。** そこに実装を足されないよう、テストで固定してある。
@@ -306,7 +315,11 @@ python -m unittest discover tests
   **初回は必ず `doctor` で当たり外れを確認してから**投稿すること。
 - 対応する書式は 見出し・箇条書き・番号付きリスト・引用・リンクのみ。
   画像・表・コードブロック・埋め込み・有料エリアの設定は非対応。
-- 見出し画像(サムネイル)は設定しない。公開前に手動で付ける。
+- 見出し画像(サムネイル)は、front matter の `eyecatch` で指定できるところまで。
+  note への貼り付けは未実装で、いまは公開前に手動で付ける。
+- **ヘッドレスでは動かない。** note のエディタが組み上がらないため、
+  `doctor` も `post` も `update` も `--headed` を付けて実行する。
+  CI やバックグラウンドでの無人実行はできない。
 - 上書きは本文を全選択してから貼り付けて置き換える方式。実行前に note 側の内容を確認すること。
 - 新規作成は `note.com/notes/new` から `https://editor.note.com/new` へ転送されるため、
   転送先を直接開いている。既存記事の編集画面(`editor.note.com/notes/{key}/edit/`)は

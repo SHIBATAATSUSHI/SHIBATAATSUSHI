@@ -298,6 +298,20 @@ class StubPage:
         raise RuntimeError("この環境では note に到達できない")
 
 
+class _StubPage:
+    """doctor のレポート生成に渡す最小のページ。セレクタは何も当たらない。"""
+
+    def __init__(self, url: str, elements: dict | None = None):
+        self.url = url
+        self._elements = elements if elements is not None else {}
+
+    def locator(self, selector):
+        raise RuntimeError("何も当たらない")
+
+    def evaluate(self, script):
+        return self._elements
+
+
 class VerifyAccountTest(unittest.TestCase):
     """ログイン中アカウントの照合。取り違え防止の要。"""
 
@@ -436,19 +450,15 @@ class DoctorReportTest(unittest.TestCase):
         self.assertIn("取得できません", note_post._format_elements({}))
 
     def test_report_marks_missing_selectors(self):
-        class Page:
-            url = "https://note.com/notes/new"
-
-            def locator(self, selector):
-                raise RuntimeError("何も当たらない")
-
-            def evaluate(self, script):
-                return {"buttons": [], "inputs": [], "editables": []}
-
+        # 画面自体は組み上がっている(骨組みではない)状態で、定義だけが外れる場合
+        page = _StubPage(
+            url="https://note.com/notes/new",
+            elements={"buttons": [{"tag": "button", "text": "下書き保存"}], "editables": []},
+        )
         account = note_post.Account(
             key="19770104", urlname="19770104", storage_state=Path("/tmp/s.json")
         )
-        report = note_post._doctor_report(Page(), account, note_post.NEW_NOTE_URL, "19770104")
+        report = note_post._doctor_report(page, account, note_post.NEW_NOTE_URL, "19770104")
         self.assertIn("**なし**", report)
         self.assertIn("SEL_TITLE", report)
         self.assertIn("見つからなかった定義", report)
@@ -478,6 +488,43 @@ class DoctorIsReadOnlyTest(unittest.TestCase):
         clicks = [line for line in self.source().splitlines() if ".click()" in line]
         self.assertEqual(len(clicks), 1)
         self.assertIn("SEL_GOTO_PUBLISH", clicks[0])
+
+
+class SkeletonCaptureTest(unittest.TestCase):
+    """ヘッドレスで撮ってしまった空の画面を、採取結果として採用しないこと。
+
+    note のエディタはヘッドレスだと描画が進まず、テキストの無いボタンが数個
+    残るだけになる。これを「note のUIが変わった」と読み違えると、当たるはずの
+    セレクタを書き換えてしまう。
+    """
+
+    def test_empty_capture_is_skeleton(self):
+        self.assertTrue(note_post._looks_like_skeleton({}))
+
+    def test_textless_buttons_only_is_skeleton(self):
+        elements = {"buttons": [{"tag": "button", "text": ""}] * 5, "inputs": [], "editables": []}
+        self.assertTrue(note_post._looks_like_skeleton(elements))
+
+    def test_editor_with_body_is_not_skeleton(self):
+        elements = {"buttons": [], "inputs": [], "editables": [{"tag": "div"}]}
+        self.assertFalse(note_post._looks_like_skeleton(elements))
+
+    def test_named_buttons_are_not_skeleton(self):
+        elements = {"buttons": [{"tag": "button", "text": "公開に進む"}]}
+        self.assertFalse(note_post._looks_like_skeleton(elements))
+
+    def test_report_tells_you_to_retry_headed(self):
+        page = _StubPage(url="https://editor.note.com/notes/nabc/edit/")
+        account = note_post.Account(
+            key="19770104", urlname="19770104", storage_state=Path("state.json")
+        )
+        report = note_post._doctor_report(
+            page, account, "https://editor.note.com/notes/nabc/edit/", "19770104", headed=False
+        )
+        self.assertIn("この採取は使えない", report)
+        self.assertIn("--headed", report)
+        # 骨組みのときにセレクタを直させないこと
+        self.assertNotIn("セレクタ定義に候補を追加する", report)
 
 
 class CliGuardTest(unittest.TestCase):
