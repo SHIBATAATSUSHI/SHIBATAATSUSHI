@@ -14,22 +14,28 @@ iPhone の Claude Code(claude.ai/code / Claude アプリ)で新しく開ける�
 
 つまり「`claudecode` でしかやれないことがある」のは事実(ローカルのファイル・MCP サーバー・アプリを触れる)だが、**iPhone に出てこない理由は能力差ではなく置き場所の問題**。
 
-## `claudecode` を GitHub に上げても解決しない理由
+## 資産はフォルダではなくホーム側にある
 
-`claudecode` には、クラウド VM では原理的に再現できないものが載っている(2026-08 時点):
+`claudecode` フォルダの中身は `.claude/` と空の `code test.md` だけ(2026-08 確認)。ローカル資産の実体は **`~/.claude/` 側**にある:
 
 - **claude-mem** — `localhost:37701` で動くローカルの記憶システム。過去の研究・判断の蓄積(100k tokens 規模)。クラウド VM から localhost には届かない。
-- **`~/.claude/skills/` の自作スキル** — `stop-slop` / `disk-audit` / `obsidian-save`。リポジトリ内ではなくホーム側にあるため、clone しても付いてこない。
+- **`~/.claude/skills/` の自作スキル** — `stop-slop` / `disk-audit` / `obsidian-save`。
 - **Obsidian 連携** — iCloud 上の vault を直接読み書きする。
 - **ディスク診断・VM 調査** — Mac の実ファイルシステムが対象。
 
-したがって `claudecode` の連携手段は Remote Control 一択。GitHub 化はこれらを解決しない。
+**これらはフォルダに紐づいていないので、Mac のどのフォルダから `claude` を起動しても使える。** つまり本質は「`claudecode` でしかやれないこと」ではなく「**Mac でしかやれないこと**」。
+
+帰結:
+
+- `claudecode` を GitHub 化しても意味がない(中身が無く、資産はホーム側にあるため)
+- 連携手段は Remote Control 一択
+- どのフォルダで起動しても全機能が使えるので、`remoteControlAtStartup: true` の常時 on が効く
 
 ## 3つの連携手段と使い分け
 
 | 手段 | Claude が動く場所 | ケータイから触れる範囲 | Mac の状態 |
 |---|---|---|---|
-| **Remote Control** | Mac | ローカル全部(`claudecode` も含む) | 起動+ネット接続が必要 |
+| **Remote Control** | Mac | ローカル全部(claude-mem・自作スキル・Obsidian も) | 起動+ネット接続が必要 |
 | **クラウドセッション** | クラウド VM | GitHub にあるリポジトリのみ | 不要(寝てても動く) |
 | **Dispatch** | Mac(デスクトップアプリ) | ローカル全部 | 起動が必要 |
 
