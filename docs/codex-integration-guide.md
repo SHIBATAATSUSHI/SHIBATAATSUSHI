@@ -93,14 +93,34 @@ tool_timeout_sec = 120
 
 ## ケータイから使う
 
-両方ともケータイから同じように扱える。
+**両者の構造は同じ**。「クラウドで動くもの」と「自分の Mac で動くもの」の2系統があり、後者は接続作業が要る。
 
-| | 接続方法 | できること |
+| | クラウド側 | ローカル(Mac)側 |
 |---|---|---|
-| **Claude Code** | Remote Control 常駐(設定済み。`docs/mac-mobile-sync-guide.md`) | デバイスカードから Mac 上でセッションを起こす |
-| **Codex** | Codex for Mac が出す QR を ChatGPT アプリ(iOS/Android)で読む | タスクの作成・検索・フォーク・差分確認・コマンド承認 |
+| **Claude Code** | クラウドセッション(GitHub リポジトリ) | Remote Control 常駐 → デバイスカードから起こす |
+| **Codex** | Codex cloud(GitHub リポジトリ。接続作業なしで ChatGPT アプリに出る) | Codex for Mac と QR でペアリング |
 
-Codex はクラウド環境でタスクを非同期実行できるので、投げて離れる使い方に向く。
+### Codex をケータイと繋ぐ手順
+
+前提: **Codex for Mac(デスクトップアプリ)** と ChatGPT モバイルアプリの最新版。両方で**同じ ChatGPT アカウント・ワークスペース**にサインインしていること。CLI だけでは繋がらない。
+
+アプリが入っているかの確認:
+
+```bash
+ls /Applications | grep -i codex
+```
+
+1. **Mac**: Codex アプリを開き、サイドバーの **Set up Codex mobile** から QR コードを表示する
+2. **iPhone**: その QR をカメラで読む。ChatGPT が開き、ワークスペースの確認と(設定していれば)SSO・MFA・パスキーの手順を経て、Mac が接続済みホストとして一覧に出る
+3. **Mac**: Codex アプリの **Settings > Connections** で接続先を管理する
+
+接続後、**Keep this Mac awake** を有効にしておく。Mac がスリープしたりネットワークが切れたり Codex アプリが閉じると、モバイル側のセッションはホストに再到達できるまで止まる。Claude Code の Remote Control と同じ制約。
+
+必要なら **Computer Use** と Chrome 拡張も有効にできる。ローカルアプリやブラウザ操作まで Codex の守備範囲が広がる。
+
+### できること
+
+ケータイからタスクの作成・検索・フォーク・差分確認・コマンド承認ができる。Codex はクラウド環境でタスクを非同期実行できるので、投げて離れる使い方に向く。
 
 ## 使い分けの指針
 
