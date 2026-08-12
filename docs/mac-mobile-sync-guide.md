@@ -213,10 +213,31 @@ exec tmux new -s cc "claude remote-control --name MacBook"
 
 長めのタスクを投げてから、**別アプリにフォーカスを移して**待つこと。
 
-#### 届かないとき
+#### 届かないとき — ツールの戻り値を読むのが最短
+
+`PushNotification` ツールの戻り値に理由がそのまま出る。当てずっぽうで設定をいじる前にこれを見る。
+
+Mac のセッションで:
+
+```
+PushNotification ツールを使って、iPhone にテスト通知を送って。送信結果も教えて。
+```
+
+| 戻り値 | 意味 | 対処 |
+|---|---|---|
+| `Not sent because you're active in this terminal.` | フォーカス抑制。端末の前にいると送られない | 送信直後に `Control + Command + Q` で画面ロックしてから待つ |
+| `Remote Control inactive` | **そのセッションが Remote Control に繋がっていない**。通知の経路が無い | そのセッションで `/rc` を打つ。footer に `/rc active` が出れば OK |
+| `Terminal notification sent.` のみ | Mac のローカル通知は出たがモバイルには飛んでいない | 上の2つのどちらか |
+
+**間違えやすい点**:
+
+- `pgrep -fl "claude remote-control"` で常駐サーバーが見えても、**キーボードで打っているセッションとは別プロセス**。常駐が生きていても、そのセッションが繋がっていなければ通知は飛ばない
+- `/config` の「Enable Remote Control for all sessions」は**次に起動するセッションから**効く。今動いているセッションには遡って適用されない。その場で繋ぐには `/rc`
+
+その他:
 
 - `/config` に `No mobile registered` と出る → iPhone で Claude アプリを一度開く(プッシュトークンが更新される)。次に Remote Control が繋がったときに解消する
-- iOS の集中モード・通知要約に飲まれていないか確認する
+- iOS の集中モード(ステータスバーに三日月やベッドのアイコンが出ている状態)・通知要約に飲まれていないか確認する
 
 ### 4. Mac がオフでも触りたいものは GitHub に置く
 
