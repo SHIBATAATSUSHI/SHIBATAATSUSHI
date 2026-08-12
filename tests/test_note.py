@@ -513,18 +513,44 @@ class SkeletonCaptureTest(unittest.TestCase):
         elements = {"buttons": [{"tag": "button", "text": "公開に進む"}]}
         self.assertFalse(note_post._looks_like_skeleton(elements))
 
-    def test_report_tells_you_to_retry_headed(self):
-        page = _StubPage(url="https://editor.note.com/notes/nabc/edit/")
+    def _report(self, captured=None, elements=None):
+        page = _StubPage(url="https://editor.note.com/notes/nabc/edit/", elements=elements)
         account = note_post.Account(
             key="19770104", urlname="19770104", storage_state=Path("state.json")
         )
-        report = note_post._doctor_report(
-            page, account, "https://editor.note.com/notes/nabc/edit/", "19770104", headed=False
+        return note_post._doctor_report(
+            page,
+            account,
+            "https://editor.note.com/notes/nabc/edit/",
+            "19770104",
+            headed=True,
+            captured=captured,
         )
+
+    def test_report_sends_you_to_the_errors_not_the_selectors(self):
+        report = self._report()
         self.assertIn("この採取は使えない", report)
-        self.assertIn("--headed", report)
+        self.assertIn("読み込み時のエラー", report)
         # 骨組みのときにセレクタを直させないこと
         self.assertNotIn("セレクタ定義に候補を追加する", report)
+
+    def test_report_suggests_trying_another_draft(self):
+        """この記事だけの問題か、環境全体の問題かを切り分けさせること。"""
+        self.assertIn("別の下書きURL", self._report())
+
+    def test_errors_are_folded_by_kind(self):
+        captured = {
+            "pageerror": ["TypeError: x is not a function"],
+            "console": ["[error] boom"] * 30,
+            "requests": ["403 https://note.com/api/v3/notes/nabc"],
+        }
+        report = self._report(captured=captured)
+        self.assertIn("TypeError: x is not a function", report)
+        self.assertIn("(×30)", report)
+        self.assertIn("403 https://note.com/api/v3/notes/nabc", report)
+
+    def test_error_section_says_when_nothing_was_captured(self):
+        self.assertIn("(採取していない)", "\n".join(note_post._error_section(None)))
 
 
 class CliGuardTest(unittest.TestCase):

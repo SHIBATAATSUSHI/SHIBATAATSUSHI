@@ -1580,11 +1580,36 @@ def _has_any(page, selectors: list[str]) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def _attach_error_capture(page) -> dict:
+    """コンソールエラーと失敗したリクエストを集める。
+
+    エディタの外枠だけ出て中身が組み上がらないとき、原因はDOMではなく
+    JS の例外か、記事データの取得失敗にある。要素を何度撮っても分からない。
+    """
+    captured: dict[str, list[str]] = {"console": [], "pageerror": [], "requests": []}
+
+    def on_console(msg):
+        if msg.type in {"error", "warning"}:
+            captured["console"].append(f"[{msg.type}] {msg.text}"[:500])
+
+    def on_response(res):
+        if res.status >= 400:
+            captured["requests"].append(f"{res.status} {res.url}"[:500])
+
+    page.on("console", on_console)
+    page.on("pageerror", lambda exc: captured["pageerror"].append(str(exc)[:500]))
+    page.on("requestfailed", lambda req: captured["requests"].append(
+        f"failed {req.url} ({(req.failure or '')})"[:500]
+    ))
+    page.on("response", on_response)
+    return captured
+
+
 def _looks_like_skeleton(elements: dict) -> bool:
     """エディタが組み上がる前の骨組みを撮ってしまっていないか。
 
-    note のエディタはヘッドレスだと描画が進まず、テキストの無いボタンが数個
-    残るだけになる。入力欄も編集領域も無い状態は、UI変更ではなくこれを疑う。
+    入力欄も編集領域も無く、ボタンにテキストも無い状態。UI変更を疑う前に、
+    そもそも画面が完成していない可能性をここで切り分ける。
     """
     if not elements:
         return True
@@ -1594,8 +1619,41 @@ def _looks_like_skeleton(elements: dict) -> bool:
     return all(not (b.get("text") or "").strip() for b in buttons)
 
 
+def _error_section(captured: dict | None) -> list[str]:
+    """読み込み中に出たエラーを、そのまま貼れる形で並べる。"""
+    lines = ["## 読み込み時のエラー", ""]
+    if captured is None:
+        return lines + ["(採取していない)", ""]
+
+    labels = [
+        ("pageerror", "JS の例外", "画面が組み上がらない原因はたいていここ"),
+        ("console", "コンソール", "error と warning のみ"),
+        ("requests", "失敗したリクエスト", "400以上と、接続そのものの失敗"),
+    ]
+    for key, label, note in labels:
+        items = captured.get(key) or []
+        lines += [f"### {label}({len(items)}件)", f"_{note}_", ""]
+        if not items:
+            lines += ["(なし)", ""]
+            continue
+        lines.append("```")
+        # 同じエラーが何十件も並ぶことがあるので、種類ごとに1件へ畳む
+        seen: dict[str, int] = {}
+        for item in items:
+            seen[item] = seen.get(item, 0) + 1
+        for item, count in list(seen.items())[:20]:
+            lines.append(item + (f"  (×{count})" if count > 1 else ""))
+        lines += ["```", ""]
+    return lines
+
+
 def _doctor_report(
-    page, account: Account, target_url: str, verified: str | None, headed: bool = True
+    page,
+    account: Account,
+    target_url: str,
+    verified: str | None,
+    headed: bool = True,
+    captured: dict | None = None,
 ) -> str:
     """画面の実物とセレクタの当たり外れを Markdown にまとめる。"""
     matches = _match_selector_groups(page)
@@ -1619,11 +1677,11 @@ def _doctor_report(
             "> **この採取は使えない。** 入力欄も編集領域も取れておらず、"
             "エディタが組み上がる前の骨組みを撮っている。",
             ">",
-            "> note のエディタはヘッドレスでは描画が進まない。"
-            + ("`--headed` を付けて撮り直すこと。" if not headed else
-               "表示ありでこうなる場合は、note 側のUI変更を疑う。"),
+            "> セレクタは触らないこと。下の「読み込み時のエラー」を先に見る。",
             "",
         ]
+
+    lines += _error_section(captured)
 
     lines += [
         "## セレクタの当たり外れ",
@@ -1666,10 +1724,14 @@ def _doctor_report(
     lines += ["## 次にやること", ""]
     if skeleton:
         lines += [
-            "セレクタは触らない。**まず撮り直す。**",
+            "セレクタは触らない。画面が完成していないので、当たらなくて当然。",
+            "",
+            "1. 上の「読み込み時のエラー」を見る",
+            "2. **別の下書きURLで同じ症状が出るか**を確かめる。"
+            "出なければこの記事だけの問題、出れば note 側かこの環境の問題",
             "",
             "```bash",
-            f"python scripts/note_post.py doctor --url {target_url} --headed",
+            "python scripts/note_post.py doctor --url <別の下書きURL> --headed --keep-open",
             "```",
         ]
     elif missing:
@@ -1720,6 +1782,7 @@ def cmd_doctor(args, accounts: dict[str, Account], default_key: str | None) -> i
             context = browser.new_context(storage_state=str(account.storage_state))
             page = context.new_page()
             page.set_default_timeout(30000)
+            captured = _attach_error_capture(page)
 
             print("ログイン中のアカウントを確認しています...")
             # 診断なので、照合できなくても止めずに結果だけ記録する
@@ -1730,11 +1793,8 @@ def cmd_doctor(args, accounts: dict[str, Account], default_key: str | None) -> i
             page.wait_for_timeout(1500)
             if not _wait_for_editor(page):
                 print("  [warn] 本文欄が現れませんでした。その時点の画面を採取します。")
-                if not args.headed:
-                    print(
-                        "  note のエディタはヘッドレスでは組み上がりません。"
-                        "--headed を付けて撮り直してください。"
-                    )
+                for line in (captured["pageerror"] + captured["requests"])[:5]:
+                    print(f"    {line}")
 
             if args.stage == "publish":
                 # 公開設定画面(ハッシュタグと見出し画像がある)を見に行く。
@@ -1756,7 +1816,9 @@ def cmd_doctor(args, accounts: dict[str, Account], default_key: str | None) -> i
                     f"--account {account.key} --manual"
                 )
 
-            report = _doctor_report(page, account, target_url, verified, args.headed)
+            report = _doctor_report(
+                page, account, target_url, verified, args.headed, captured
+            )
             shot_path = out_dir / f"doctor-{stamp}.png"
             try:
                 page.screenshot(path=str(shot_path), full_page=True)
