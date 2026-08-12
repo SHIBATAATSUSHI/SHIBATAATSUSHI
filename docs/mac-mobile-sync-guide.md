@@ -14,6 +14,17 @@ iPhone の Claude Code(claude.ai/code / Claude アプリ)で新しく開ける�
 
 つまり「`claudecode` でしかやれないことがある」のは事実(ローカルのファイル・MCP サーバー・アプリを触れる)だが、**iPhone に出てこない理由は能力差ではなく置き場所の問題**。
 
+## `claudecode` を GitHub に上げても解決しない理由
+
+`claudecode` には、クラウド VM では原理的に再現できないものが載っている(2026-08 時点):
+
+- **claude-mem** — `localhost:37701` で動くローカルの記憶システム。過去の研究・判断の蓄積(100k tokens 規模)。クラウド VM から localhost には届かない。
+- **`~/.claude/skills/` の自作スキル** — `stop-slop` / `disk-audit` / `obsidian-save`。リポジトリ内ではなくホーム側にあるため、clone しても付いてこない。
+- **Obsidian 連携** — iCloud 上の vault を直接読み書きする。
+- **ディスク診断・VM 調査** — Mac の実ファイルシステムが対象。
+
+したがって `claudecode` の連携手段は Remote Control 一択。GitHub 化はこれらを解決しない。
+
 ## 3つの連携手段と使い分け
 
 | 手段 | Claude が動く場所 | ケータイから触れる範囲 | Mac の状態 |
@@ -44,7 +55,13 @@ iPhone の Claude Code(claude.ai/code / Claude アプリ)で新しく開ける�
 
 単発でやるなら、セッション中に `/remote-control`(`/rc`)。QR コードが出るのでケータイで読み取ればそのまま繋がる。
 
-**制約**: ローカルプロセスが生きている間だけ。ターミナルを閉じる/Mac をスリープさせると切れる。長時間走らせたいなら `tmux` 内で起動する。
+**制約**: ローカルプロセスが生きている間だけ。ターミナルを閉じる/Mac をスリープさせると切れる。外出中も維持したいなら `tmux` 内で起動する:
+
+```bash
+tmux new -s cc
+cd ~/claude/claudecode && claude --remote-control
+# Ctrl+B → D で切り離す(プロセスは生き続ける)
+```
 
 ### 2. プッシュ通知を on にする(Mac 側)
 
@@ -57,17 +74,19 @@ Claude Code 内で `/config` →
 
 ### 3. Mac がオフでも触りたいものは GitHub に置く
 
-`claudecode` は git 管理外のローカルフォルダ(2026-08 時点で確認済み)。ケータイ単独で触りたいなら、private リポジトリとして GitHub に上げる:
+Mac を閉じた状態でも触りたい**普通のコード・文章**は、private リポジトリとして GitHub に上げればケータイ単独で開ける:
 
 ```bash
-cd ~/claude/claudecode
+cd <フォルダ>
 git init && git add -A && git commit -m "初期コミット"
-gh repo create claudecode --private --source=. --push
+gh repo create <名前> --private --source=. --push
 ```
 
 上げた時点で iPhone のリポジトリ選択に出てくる。
 
 > 上げる前に、鍵・トークン・個人情報が混ざっていないか確認し、必要なら `.gitignore` を先に書くこと。
+
+ただし `claudecode` は前述のとおりこれでは解決しない。ローカル資産に依存するものと、単なるコード・文章は分けて考える。
 
 ### 4. 引き継ぎメモ(`/handoff`)
 
