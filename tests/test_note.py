@@ -553,6 +553,37 @@ class SkeletonCaptureTest(unittest.TestCase):
         self.assertIn("(採取していない)", "\n".join(note_post._error_section(None)))
 
 
+class MissingNoteHintTest(unittest.TestCase):
+    """存在しない記事キーを note_url に書いたときに、そう言えること。
+
+    実際に起きた事故:原稿に実在しない記事キーが入っており、エディタは外枠だけ
+    描いて止まった。「本文欄が現れません」としか出ず、原因の特定に半日かかった。
+    """
+
+    def _page_with(self, requests):
+        page = _StubPage(url="https://editor.note.com/notes/nabc/edit/")
+        note_post._PAGE_ERRORS[page] = {
+            "console": [], "pageerror": [], "requests": requests
+        }
+        return page
+
+    def test_404_on_the_article_api_is_named(self):
+        page = self._page_with(["404 https://note.com/api/v3/notes/n691e089e717b"])
+        hint = note_post._missing_note_hint(page)
+        self.assertIn("404", hint)
+        self.assertIn("note_url を確認", hint)
+
+    def test_unrelated_failures_do_not_trigger_it(self):
+        page = self._page_with([
+            "failed https://logcollector.note.com/log_tracking_pb.firehose (net::ERR_ABORTED)",
+            "404 https://note.com/api/v2/some-banner",
+        ])
+        self.assertEqual(note_post._missing_note_hint(page), "")
+
+    def test_no_capture_is_silent(self):
+        self.assertEqual(note_post._missing_note_hint(_StubPage(url="x")), "")
+
+
 class CliGuardTest(unittest.TestCase):
     """CLI が事故を止めること。いずれも書き込みには進まない。"""
 

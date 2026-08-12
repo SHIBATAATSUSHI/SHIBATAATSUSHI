@@ -3,7 +3,8 @@ title: 会話をリハビリテーションの評価へ戻す：雑談と呼ば�
 account: 19770104
 tags: [理学療法士, 臨床判断, リハビリテーション, 評価, 若手教育]
 publish: false
-note_url: https://editor.note.com/notes/n691e089e717b/edit/
+# note にまだ下書きが無い。note 上で空の下書きを作り、その編集URLをここに書く
+# note_url: https://editor.note.com/notes/nxxxxxxxxxxxx/edit/
 ---
 「今日は話しているうちに終わってしまいました」。若手からそう報告を受けることがある。声には、時間を無駄にしたという含みがある。
 

@@ -27,6 +27,7 @@ import os
 import re
 import sys
 import time
+import weakref
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -1129,8 +1130,10 @@ def _open_editor(page, account: Account, target_url: str, shot_dir: Path | None)
             "エディタの本文欄が現れませんでした。\n"
             f"  開いたURL: {target_url}\n"
             f"  実際のURL: {page.url}\n"
-            "  投稿タイプの選択画面など、別の画面に着いている可能性があります。\n"
-            "  状況を採取するには: python scripts/note_post.py doctor\n\n"
+            + _missing_note_hint(page)
+            + "\n  投稿タイプの選択画面など、別の画面に着いている可能性もあります。\n"
+            f"  状況を採取するには: python scripts/note_post.py doctor "
+            f"--url {target_url} --headed\n\n"
             "  いま画面にあるもの:\n" + _format_elements(_collect_elements(page), limit=10)
         )
 
@@ -1409,6 +1412,8 @@ def _run_browser(account: Account, args, work) -> int:
             print(f"[warn] クリップボード権限を付与できませんでした: {exc}")
         page = context.new_page()
         page.set_default_timeout(30000)
+        # doctor と同じ採取をしておく。白紙画面に当たったとき原因を出せる
+        _attach_error_capture(page)
         try:
             print("\nログイン中のアカウントを確認しています...")
             _verify_account(context, page, account, args.allow_unverified)
@@ -1576,8 +1581,39 @@ def _has_any(page, selectors: list[str]) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# doctor コマンド
+# 読み込みエラーの採取と doctor コマンド
+#
+# 採取は doctor 専用ではない。post / update でも同じ白紙画面に当たるため、
+# ページごとの記録をここで持ち、エラーメッセージから引けるようにしておく。
 # ---------------------------------------------------------------------------
+
+_PAGE_ERRORS: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _errors_for(page) -> dict | None:
+    """そのページで採取したエラー。採取していなければ None。"""
+    try:
+        return _PAGE_ERRORS.get(page)
+    except TypeError:
+        return None
+
+
+def _missing_note_hint(page) -> str:
+    """記事データの取得が 404 で落ちていれば、その旨を返す。
+
+    存在しない記事キーを note_url に書いていると、エディタは外枠だけ描画して
+    止まる。「本文欄が現れません」だけでは、原稿側の誤りだと気づけない。
+    """
+    captured = _errors_for(page) or {}
+    for line in captured.get("requests", []):
+        if line.startswith("404") and "/notes/" in line:
+            return (
+                "\n  記事データの取得が 404 で失敗しています:\n"
+                f"    {line}\n"
+                "  この記事キーは note 上に存在しません。note_url を確認してください。\n"
+                "  下書きがまだ無い場合は、note で空の下書きを作り、その編集URLを書きます。"
+            )
+    return ""
 
 
 def _attach_error_capture(page) -> dict:
@@ -1602,6 +1638,10 @@ def _attach_error_capture(page) -> dict:
         f"failed {req.url} ({(req.failure or '')})"[:500]
     ))
     page.on("response", on_response)
+    try:
+        _PAGE_ERRORS[page] = captured
+    except TypeError:
+        pass
     return captured
 
 
