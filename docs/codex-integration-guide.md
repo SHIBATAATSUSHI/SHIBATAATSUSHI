@@ -79,7 +79,7 @@ Mac のターミナルで Claude Code を開き、上から順に打つ。`/plug
 
 ### Codex → Claude Code(逆方向)
 
-`~/.codex/config.toml` に追記する。
+`~/.codex/config.toml` に次の内容を**追記する**。これはファイルの中身であって、ターミナルに打つコマンドではない。`[...]` を直接シェルに貼ると zsh がワイルドカードと解釈して `no matches found` になる。
 
 ```toml
 [mcp_servers.claude-code]
@@ -88,6 +88,22 @@ args = ["mcp", "serve"]
 startup_timeout_sec = 30
 tool_timeout_sec = 120
 ```
+
+ターミナルから安全に追記するには、次をまとめて貼る(既存の内容は消えない):
+
+```bash
+mkdir -p ~/.codex
+cat >> ~/.codex/config.toml <<'TOML_END'
+
+[mcp_servers.claude-code]
+command = "claude"
+args = ["mcp", "serve"]
+startup_timeout_sec = 30
+tool_timeout_sec = 120
+TOML_END
+```
+
+追記後に `cat ~/.codex/config.toml` で確認する。**2回実行すると同じセクションが重複し TOML として不正になる**ので、既に `[mcp_servers.claude-code]` があるときは実行しない。
 
 呼べるツールを絞りたいときは `enabled_tools = ["Read", "GrepTool", "GlobTool"]`、一時的に止めたいときは `enabled = false`。
 
@@ -100,14 +116,28 @@ tool_timeout_sec = 120
 | **Claude Code** | クラウドセッション(GitHub リポジトリ) | Remote Control 常駐 → デバイスカードから起こす |
 | **Codex** | Codex cloud(GitHub リポジトリ。接続作業なしで ChatGPT アプリに出る) | Codex for Mac と QR でペアリング |
 
-### Codex をケータイと繋ぐ手順
+### Codex をケータイと繋ぐ手順(多くの場合は不要)
 
-前提: **Codex for Mac(デスクトップアプリ)** と ChatGPT モバイルアプリの最新版。両方で**同じ ChatGPT アカウント・ワークスペース**にサインインしていること。CLI だけでは繋がらない。
+**先に確認**: この手順は「Codex を**単独で**ケータイから操作したい」場合にだけ必要。以下の経路が既にあるので、通常はやらなくてよい。
+
+```
+ケータイ → (Remote Control) → Mac の Claude Code → (/codex:* プラグイン) → Codex CLI
+```
+
+Claude Code が Codex を呼べて、その Claude Code セッションがケータイから触れる以上、**ケータイから Codex に仕事を投げる導線は既に通っている**。役割分担も「Claude 主導・Codex レビュー」なので、Codex を単独で叩く場面はそもそも少ない。
+
+前提: **Codex for Mac(デスクトップアプリ)** と ChatGPT モバイルアプリの最新版。両方で**同じ ChatGPT アカウント・ワークスペース**にサインインしていること。CLI だけでは繋がらない。**Apple Silicon 必須**。
 
 アプリが入っているかの確認:
 
 ```bash
 ls /Applications | grep -i codex
+```
+
+無ければ導入する:
+
+```bash
+brew install --cask codex-app
 ```
 
 1. **Mac**: Codex アプリを開き、サイドバーの **Set up Codex mobile** から QR コードを表示する
