@@ -16,6 +16,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -658,20 +659,57 @@ class CliGuardTest(unittest.TestCase):
             self.run_cli("post", "--file", str(self.article), "--publish", "--dry-run"), 1
         )
 
-    def test_publish_requires_yes_when_not_interactive(self):
-        """cron や CI から、確認なしに公開されないこと。"""
+    def _publishable_article(self) -> Path:
+        """allow_publish を有効にし、publish: true の原稿を用意する。"""
         config = json.loads(self.config.read_text(encoding="utf-8"))
         config["accounts"]["19770104"]["allow_publish"] = True
         self.config.write_text(json.dumps(config), encoding="utf-8")
+        return write(self.tmp / "pub.md", "---\ntitle: T\npublish: true\n---\n本文です。\n")
 
-        article = write(
-            self.tmp / "pub.md", "---\ntitle: T\npublish: true\n---\n本文です。\n"
-        )
-        # テストは非対話(isatty が False)で走るため、--yes 無しは中断されるはず
-        self.assertEqual(self.run_cli("post", "--file", str(article), "--dry-run"), 1)
-        self.assertEqual(
-            self.run_cli("post", "--file", str(article), "--dry-run", "--yes"), 0
-        )
+    def test_publish_requires_yes_when_not_interactive(self):
+        """cron や CI から、確認なしに公開されないこと。
+
+        以前は「テストは非対話で走るはず」と環境に頼っていた。開発者が
+        ターミナルから実行すると isatty() が真になり、確認プロンプトの
+        input() でテストが永久に止まっていた。stdin を明示的に差し替える。
+        """
+        article = self._publishable_article()
+        with mock.patch.object(sys, "stdin", io.StringIO()):
+            # StringIO の isatty() は False。非対話環境を再現する
+            self.assertEqual(self.run_cli("post", "--file", str(article), "--dry-run"), 1)
+            self.assertEqual(
+                self.run_cli("post", "--file", str(article), "--dry-run", "--yes"), 0
+            )
+
+    def test_publish_prompt_aborts_on_no(self):
+        """対話環境で「N」と答えたら公開しないこと。"""
+        article = self._publishable_article()
+        stdin = mock.MagicMock()
+        stdin.isatty.return_value = True
+        with mock.patch.object(sys, "stdin", stdin), \
+             mock.patch("builtins.input", return_value="n") as prompt:
+            self.assertEqual(self.run_cli("post", "--file", str(article), "--dry-run"), 1)
+        prompt.assert_called_once()
+
+    def test_publish_prompt_proceeds_on_yes(self):
+        """対話環境で「y」と答えたら先へ進むこと。"""
+        article = self._publishable_article()
+        stdin = mock.MagicMock()
+        stdin.isatty.return_value = True
+        with mock.patch.object(sys, "stdin", stdin), \
+             mock.patch("builtins.input", return_value="y"):
+            self.assertEqual(self.run_cli("post", "--file", str(article), "--dry-run"), 0)
+
+    def test_yes_flag_skips_the_prompt_entirely(self):
+        """--yes があれば、対話環境でもプロンプトを出さないこと。"""
+        article = self._publishable_article()
+        stdin = mock.MagicMock()
+        stdin.isatty.return_value = True
+        with mock.patch.object(sys, "stdin", stdin), \
+             mock.patch("builtins.input", side_effect=AssertionError("prompt が呼ばれた")):
+            self.assertEqual(
+                self.run_cli("post", "--file", str(article), "--dry-run", "--yes"), 0
+            )
 
     def test_draft_dry_run_succeeds(self):
         self.assertEqual(self.run_cli("post", "--file", str(self.article), "--dry-run"), 0)
