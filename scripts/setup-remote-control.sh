@@ -142,8 +142,19 @@ fi
 
 mkdir -p "$LA_DIR" "$LOGDIR"
 
-# 同じラベルが既に登録済みなら一度外す(未登録のときのエラーは無視する)
+# 同じラベルが既に登録済みなら一度外す(未登録のときのエラーは無視する)。
+# bootout は非同期で、解除が終わる前に bootstrap すると
+# 「Bootstrap failed: 5: Input/output error」で弾かれる。完全に消えるまで待つ。
 launchctl bootout "gui/$UID_NUM/$LABEL" 2>/dev/null || true
+i=0
+while launchctl print "gui/$UID_NUM/$LABEL" >/dev/null 2>&1; do
+  i=$((i + 1))
+  if [ "$i" -gt 20 ]; then
+    echo "警告: 既存サービスの解除が10秒で完了しませんでした。このまま続行します。" >&2
+    break
+  fi
+  sleep 0.5
+done
 
 # /bin/zsh -lc でログインシェルを通すので、claude の絶対パスを調べなくてよい
 cat > "$PLIST" <<PLIST_END
@@ -170,7 +181,34 @@ PLIST_END
 
 echo "作成: $PLIST"
 
-launchctl bootstrap "gui/$UID_NUM" "$PLIST"
+# bootstrap は set -e で即死させず、失敗しても診断を出せるようにする。
+# 解除直後は一時的に EIO を返すことがあるため数秒あけてリトライする。
+bootstrap_err=""
+bootstrap_ok=0
+for attempt in 1 2 3; do
+  if bootstrap_err="$(launchctl bootstrap "gui/$UID_NUM" "$PLIST" 2>&1)"; then
+    bootstrap_ok=1
+    break
+  fi
+  # `[ ] && sleep` 形式は set -e との相性がシェルによって異なるため if で書く
+  if [ "$attempt" -lt 3 ]; then
+    sleep 3
+  fi
+done
+
+if [ "$bootstrap_ok" -eq 0 ]; then
+  echo "✗ 登録に失敗しました: $LABEL" >&2
+  echo "  $bootstrap_err" >&2
+  echo >&2
+  echo "  Input/output error の場合、同じラベルがまだ解除されていません。" >&2
+  echo "  次を実行してから、このスクリプトを再実行してください:" >&2
+  echo >&2
+  echo "    launchctl bootout gui/$UID_NUM/$LABEL" >&2
+  echo >&2
+  echo "  それでも解消しないときは、一度ログアウト/ログインすると確実に解除されます。" >&2
+  exit 1
+fi
+
 echo "登録: $LABEL"
 echo
 echo "起動を待っています..."
