@@ -70,6 +70,35 @@ class FrontMatterTest(unittest.TestCase):
         self.assertEqual(article.title, "見出しタイトル")
         self.assertEqual(article.body, "本文だよ")
 
+    def test_front_matter_title_wins_and_heading_is_removed(self):
+        """title と本文冒頭の `# 見出し` が両方あっても、見出しは本文に残さない。
+
+        note はタイトルを本文と別に持つ。残すと `<p># 見出し</p>` として
+        本文の先頭に同じ文言が二重に載る。
+        """
+        path = write(
+            self.tmp / "i.md",
+            "---\ntitle: front matter のタイトル\n---\n# 本文側の見出し\n\n本文だよ\n",
+        )
+        article = note_post.load_article(path)
+        self.assertEqual(article.title, "front matter のタイトル")
+        self.assertNotIn("# 本文側の見出し", article.body)
+        self.assertEqual(article.body, "本文だよ")
+
+    def test_title_from_heading_without_trailing_newline(self):
+        """見出しだけで改行が無い原稿でもタイトルを取れる。"""
+        path = write(self.tmp / "j.md", "# 見出しだけ")
+        self.assertEqual(note_post.load_article(path).title, "見出しだけ")
+
+    def test_inline_list_keeps_quoted_comma(self):
+        """引用符の内側のカンマで分割しないこと。
+
+        素朴な split(",") では `["a,b", c]` が ['"a', 'b"', 'c'] になり、
+        引用符まで残ったタグが note へ送られていた。
+        """
+        path = write(self.tmp / "k.md", '---\ntitle: T\ntags: ["a,b", c]\n---\n本文\n')
+        self.assertEqual(note_post.load_article(path).tags, ["a,b", "c"])
+
     def test_status_variants(self):
         for status, expected in [
             ("public", True), ("publish", True), ("公開", True),
@@ -429,6 +458,20 @@ class LeakedMarkupTest(unittest.TestCase):
         """変換に対応した記法は、原稿側の検査でも引っかからない。"""
         body = "## 見出し\n\n**太字**と[リンク](https://example.org)\n\n- 項目"
         self.assertEqual(note_post._leaked_markup_in_source(body), [])
+
+    def test_detects_unsupported_heading_in_the_middle(self):
+        """文書の途中に残った見出しも拾う。
+
+        タグを空文字で消していた頃は `<p>本文</p><p>#### 見出し</p>` が
+        `本文#### 見出し` と1行に潰れ、行頭を要求する検査を素通りしていた。
+        冒頭の見出しだけ検知できて途中は見逃す、という穴があった。
+        """
+        body = "本文です。\n\n#### 対応していない見出し\n\n続きの本文"
+        self.assertIn("`#`(見出し)", note_post._leaked_markup_in_source(body))
+
+    def test_detects_unsupported_heading_at_the_top(self):
+        body = "#### 対応していない見出し\n\n本文"
+        self.assertIn("`#`(見出し)", note_post._leaked_markup_in_source(body))
 
 
 class DoctorReportTest(unittest.TestCase):

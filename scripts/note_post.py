@@ -302,6 +302,34 @@ _TRUE_VALUES = {"true", "yes", "on", "1", "公開", "public"}
 _FALSE_VALUES = {"false", "no", "off", "0", "下書き", "draft"}
 
 
+def _split_inline_list(inner: str) -> list[str]:
+    """`[a, b]` 形式の中身をカンマで分ける。引用符の内側は分割しない。
+
+    素朴に `split(",")` すると `["a,b", c]` が壊れ、引用符も外れないまま
+    `'"a'` / `'b"'` のようなタグができてしまう。
+    """
+    items: list[str] = []
+    buf: list[str] = []
+    quote: str | None = None
+    for ch in inner:
+        if quote:
+            buf.append(ch)
+            if ch == quote:
+                quote = None
+            continue
+        if ch in "\"'":
+            quote = ch
+            buf.append(ch)
+            continue
+        if ch == ",":
+            items.append("".join(buf))
+            buf = []
+            continue
+        buf.append(ch)
+    items.append("".join(buf))
+    return [item for item in items if item.strip()]
+
+
 def _parse_scalar(value: str, coerce_bool: bool = True):
     """front matter の値をゆるくパースする(YAMLの極小サブセット)。
 
@@ -315,7 +343,10 @@ def _parse_scalar(value: str, coerce_bool: bool = True):
         inner = value[1:-1].strip()
         if not inner:
             return []
-        return [_parse_scalar(item, coerce_bool=False) for item in inner.split(",")]
+        return [
+            _parse_scalar(item, coerce_bool=False)
+            for item in _split_inline_list(inner)
+        ]
     if coerce_bool:
         lowered = value.lower()
         if lowered in _TRUE_VALUES:
@@ -434,12 +465,15 @@ def load_article(path: Path) -> Article:
     body = re.sub(r"<!--.*?-->", "", body, flags=re.DOTALL)
     body = re.sub(r"\n{3,}", "\n\n", body).strip("\n")
 
+    # 冒頭の `# 見出し` は常に本文から外す。note はタイトルを本文と別に持つため、
+    # 残すと `<p># 見出し</p>` として本文の先頭に重複して載る。
+    # front matter に title があるときは、そちらを優先して見出しは捨てる。
     title = meta.get("title")
-    if not title:
-        heading = re.match(r"\A#\s+(.+?)\s*\n", body)
-        if heading:
+    heading = re.match(r"\A#\s+(.+?)[ \t]*(?:\n|\Z)", body)
+    if heading:
+        body = body[heading.end() :].lstrip("\n")
+        if not title:
             title = heading.group(1)
-            body = body[heading.end() :].lstrip("\n")
     if not title:
         raise NotePostError(
             f"タイトルが決まりません: {path}\n"
@@ -1205,9 +1239,13 @@ def _leaked_markup_in_source(body: str) -> list[str]:
 
     読み戻しは冒頭と末尾しか取らないため、途中に残った記法を取りこぼす。
     原稿側から、変換されずに素通りする記法を拾っておく。
+
+    タグを空文字で消すと `<p>本文</p><p>#### 見出し</p>` が
+    `本文#### 見出し` と1行に潰れ、行頭を要求する見出しの検査が
+    素通りしてしまう。改行に置き換えてブロックの境界を残す。
     """
     html = markdown_to_note_html(body)
-    stripped = re.sub(r"<[^>]+>", "", html)
+    stripped = re.sub(r"<[^>]+>", "\n", html)
     return _leaked_markup(stripped)
 
 
