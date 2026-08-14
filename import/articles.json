@@ -1,0 +1,242 @@
+{
+  "account": "19770104",
+  "pen_name": "夏目漱右",
+  "exported_at": "2026-08-05",
+  "articles": [
+    {
+      "file": "profile.md",
+      "title": "このnoteで、これから発信すること",
+      "pillar": "固定",
+      "order": 1,
+      "price": "free",
+      "status": "draft",
+      "note_url": "https://note.com/19770104/n/nf75351d40061",
+      "tags": [
+        "理学療法士",
+        "リハビリテーション",
+        "生成AI",
+        "医療AI",
+        "自己紹介"
+      ]
+    },
+    {
+      "file": "posts/2026-08-04-ai-boundary.md",
+      "title": "医療職が生成AIを使う前に決めたい境界線：入力してはいけない情報5項目",
+      "pillar": "AI活用",
+      "order": 2,
+      "price": "free",
+      "status": "draft",
+      "note_url": "https://note.com/19770104/n/n49532b08ebb0",
+      "tags": [
+        "理学療法士",
+        "生成AI",
+        "医療AI",
+        "個人情報",
+        "リハビリテーション"
+      ]
+    },
+    {
+      "file": "posts/2026-08-04-ai-literature-check.md",
+      "title": "理学療法士が生成AIで論文を読むときの確認手順：臨床判断につなぐ7ステップ",
+      "pillar": "AI活用",
+      "order": 3,
+      "price": "free",
+      "status": "draft",
+      "note_url": "https://note.com/19770104/n/n52aef685b03f",
+      "tags": [
+        "理学療法士",
+        "論文",
+        "生成AI",
+        "リハビリテーション",
+        "EBP"
+      ]
+    },
+    {
+      "file": "posts/2026-08-04-instruction-design.md",
+      "title": "指示が伝わらないとき、言葉を変える：臨床推論・若手教育・生成AIに共通する指示設計",
+      "pillar": "若手教育",
+      "order": 4,
+      "price": "free",
+      "status": "writing",
+      "note_url": null,
+      "tags": [
+        "理学療法士",
+        "臨床推論",
+        "若手教育",
+        "生成AI",
+        "リハビリテーション"
+      ]
+    },
+    {
+      "file": "posts/2026-08-04-clinical-reasoning-questions.md",
+      "title": "若手の臨床推論に芯を作る3つの質問：答えを急がず、判断根拠を見えるようにする",
+      "pillar": "若手教育",
+      "order": 5,
+      "price": "free",
+      "status": "writing",
+      "note_url": null,
+      "tags": [
+        "理学療法士",
+        "臨床教育",
+        "臨床推論",
+        "若手教育",
+        "リハビリテーション"
+      ]
+    },
+    {
+      "file": null,
+      "title": "完遂しない判断：予定より反応を優先する",
+      "pillar": "臨床判断",
+      "order": 6,
+      "price": "free",
+      "status": "idea",
+      "note_url": null,
+      "tags": [
+        "理学療法士",
+        "臨床判断",
+        "高度急性期"
+      ]
+    },
+    {
+      "file": null,
+      "title": "高度急性期では患者数だけで仕事量を測れない",
+      "pillar": "組織運営",
+      "order": 7,
+      "price": "free",
+      "status": "idea",
+      "note_url": null,
+      "tags": [
+        "理学療法士",
+        "高度急性期",
+        "組織運営"
+      ]
+    },
+    {
+      "file": null,
+      "title": "AI・後輩・患者に共通する依頼設計チェックリスト",
+      "pillar": "AI活用",
+      "order": 8,
+      "price": "free",
+      "status": "idea",
+      "note_url": null,
+      "tags": [
+        "生成AI",
+        "若手教育",
+        "患者説明"
+      ]
+    },
+    {
+      "file": null,
+      "title": "判断根拠を引き出す質問集＋依頼設計テンプレート",
+      "pillar": "若手教育",
+      "order": 9,
+      "price": "paid",
+      "status": "idea",
+      "note_url": null,
+      "tags": [
+        "臨床教育",
+        "臨床推論",
+        "テンプレート"
+      ]
+    },
+    {
+      "file": null,
+      "title": "新人指導用の勉強会資料を生成AIで作る方法",
+      "pillar": "AI活用",
+      "order": null,
+      "price": "free",
+      "status": "idea",
+      "note_url": null,
+      "tags": [
+        "生成AI",
+        "新人教育",
+        "勉強会"
+      ]
+    },
+    {
+      "file": null,
+      "title": "会話をリハビリテーションの評価へ戻す",
+      "pillar": "臨床判断",
+      "order": null,
+      "price": "free",
+      "status": "idea",
+      "note_url": null,
+      "tags": [
+        "理学療法士",
+        "会話",
+        "臨床評価"
+      ]
+    },
+    {
+      "file": null,
+      "title": "病院を複雑適応系として見る",
+      "pillar": "組織運営",
+      "order": null,
+      "price": "free",
+      "status": "idea",
+      "note_url": null,
+      "tags": [
+        "病院",
+        "複雑系",
+        "組織運営"
+      ]
+    },
+    {
+      "file": null,
+      "title": "AI画像補正で人物が別人になる問題",
+      "pillar": "AI活用",
+      "order": null,
+      "price": "free",
+      "status": "idea",
+      "note_url": null,
+      "tags": [
+        "生成AI",
+        "画像生成",
+        "安全性"
+      ]
+    },
+    {
+      "file": null,
+      "title": "研修を文字・スライド・音声へ変える学習法",
+      "pillar": "AI活用",
+      "order": null,
+      "price": "free",
+      "status": "idea",
+      "note_url": null,
+      "tags": [
+        "生成AI",
+        "研修",
+        "学習法"
+      ]
+    },
+    {
+      "file": null,
+      "title": "理学療法士がAI時代に複数の能力を持つ意味",
+      "pillar": "AI活用",
+      "order": null,
+      "price": "free",
+      "status": "idea",
+      "note_url": null,
+      "tags": [
+        "理学療法士",
+        "生成AI",
+        "キャリア"
+      ]
+    },
+    {
+      "file": "posts/2026-08-04-copyright-disclaimer.md",
+      "title": "著作権・免責事項",
+      "pillar": "固定",
+      "order": null,
+      "price": "free",
+      "status": "published",
+      "note_url": "https://note.com/19770104/n/n1e6ec769e8e8",
+      "tags": [
+        "著作権",
+        "免責事項",
+        "生成AI",
+        "医療情報"
+      ]
+    }
+  ]
+}
