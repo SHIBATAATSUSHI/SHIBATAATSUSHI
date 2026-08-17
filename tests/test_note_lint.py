@@ -244,14 +244,21 @@ def test_役職は指摘する():
 
 
 def test_特許への言及は指摘する():
-    # 出願公開で発明者名が公開されるため、実名への経路になる
+    # 出願公開で発明者名が公開されるため、実名への経路になる。書かないと決めている
     r = lint("# 題\n\n装置を考えて特許を申請した。")
     assert "identifying" in codes(r)
 
 
-def test_治験は指摘する():
+def test_治験は確認として指摘する():
+    # 禁止ではないが、語そのものが施設を絞るため確かめさせる
     r = lint("# 題\n\n治験に関わることもある。")
     assert "identifying" in codes(r)
+    assert any("確かめる" in f.message for f in r.findings)
+
+
+def test_治験の言い換えは指摘しない():
+    r = lint("# 題\n\n臨床のすぐ隣で研究が動いていて、医師や研究者と考える場面が多い。")
+    assert "identifying" not in codes(r)
 
 
 def test_診療領域は指摘しない():
