@@ -230,6 +230,60 @@ def test_マーカー以降の記法は指摘しない():
 
 
 # --------------------------------------------------------------------------
+# 身元の特定(docs/note/DISCLOSURE.md)
+# --------------------------------------------------------------------------
+
+def test_施設名は指摘する():
+    r = lint("# 題\n\n名古屋大学の病院で働いている。")
+    assert "identifying" in codes(r)
+
+
+def test_役職は指摘する():
+    r = lint("# 題\n\nいまは管轄主任をしている。")
+    assert "identifying" in codes(r)
+
+
+def test_特許への言及は指摘する():
+    # 出願公開で発明者名が公開されるため、実名への経路になる
+    r = lint("# 題\n\n装置を考えて特許を申請した。")
+    assert "identifying" in codes(r)
+
+
+def test_治験は指摘する():
+    r = lint("# 題\n\n治験に関わることもある。")
+    assert "identifying" in codes(r)
+
+
+def test_診療領域は指摘しない():
+    # 深みはこちらから来るので、書いてよい
+    r = lint(
+        "# 題\n\n大学病院で神経難病のリハビリに関わっている。"
+        "ALSや血液がんの患者と接する場面がある。"
+    )
+    assert "identifying" not in codes(r)
+
+
+def test_マーカー以降のメモに書いても指摘しない():
+    # メモは公開されないため
+    r = lint("# 題\n\n本文。\n\n<!-- 投稿しない -->\n\n名古屋大学、管轄主任、特許の件")
+    assert "identifying" not in codes(r)
+
+
+def test_コードブロック内は指摘しない():
+    r = lint("# 題\n\n```\n名古屋大学\n```\n\n本文。")
+    assert "identifying" not in codes(r)
+
+
+def test_既存の記事は身元情報を含まない():
+    # 現状すべて一般名で書かれていることを、テストとして固定しておく
+    import pathlib
+
+    for p in sorted(pathlib.Path("docs/note").glob("0*.md")):
+        r = note_lint.lint_file(str(p))
+        assert "identifying" not in codes(r), p
+
+
+# --------------------------------------------------------------------------
 # Amazon アソシエイト
 # --------------------------------------------------------------------------
 

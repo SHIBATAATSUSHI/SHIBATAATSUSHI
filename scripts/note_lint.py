@@ -81,6 +81,23 @@ AFFILIATE_DISCLOSURE = re.compile(
 # 自分向けのメモらしき見出し。これが公開範囲に残っていたら事故。
 MEMO_HEADING = re.compile(r"投稿設定|見出し画像案|公開設定|メモ書き")
 
+# 身元が特定される語。方針は docs/note/DISCLOSURE.md にある。
+#
+# 診療領域(神経難病・血液がん・リハビリなど)や「大学病院」は書いてよい。
+# 文章の深みはそちらから来る。ここに挙げるのは**文章を良くせず、特定だけを
+# 進める情報**で、書いても失うものしかない。
+#
+# マーカー以降のメモには書いてよい(公開されないため)。
+IDENTIFYING = [
+    (re.compile(r"名古屋大学|名大"), "施設名。「大学病院」で足りる"),
+    (re.compile(r"管轄主任|チームリーダー|技師長"), "役職。書いても文章は強くならない"),
+    (
+        re.compile(r"特許|発明者"),
+        "特許は出願公開で発明者名が公開される。ペンネームから実名への経路になる",
+    ),
+    (re.compile(r"治験"), "関われる施設が限られるため、勤務先が絞り込まれる"),
+]
+
 # まだ読んでいない本について、内容を保証してしまう言い方。
 # 「〜と論じている」のように中身を断定するものだけを拾い、
 # 「〜と考えている」「〜を読み直せないか」のような見込みの言い方は通す。
@@ -497,6 +514,37 @@ def _check_unread_assertions(
     return findings
 
 
+def _check_identifying(path: str, markdown: str) -> list[Finding]:
+    """身元が特定される語が公開範囲に入っていないか見る。
+
+    方針を文書に書いただけでは守れない。うっかり書いた事故を機械的に止める。
+    判断の根拠は docs/note/DISCLOSURE.md にある。
+    """
+    publishable, offset = _publishable(markdown)
+    findings: list[Finding] = []
+    in_code = False
+    for i, raw in enumerate(publishable.splitlines(), start=1):
+        stripped = raw.strip()
+        if _FENCE_RE.match(stripped):
+            in_code = not in_code
+            continue
+        if in_code or not stripped:
+            continue
+        for pattern, reason in IDENTIFYING:
+            m = pattern.search(stripped)
+            if m:
+                findings.append(
+                    Finding(
+                        path,
+                        offset + i,
+                        LEVEL_WARNING,
+                        "identifying",
+                        f"「{m.group(0)}」は身元が特定される。{reason}",
+                    )
+                )
+    return findings
+
+
 def _check_affiliate(path: str, markdown: str) -> list[Finding]:
     """Amazon リンクとアソシエイト表示の整合を見る。
 
@@ -645,6 +693,7 @@ def lint_text(
     report.findings.extend(_check_headings(path, markdown))
     report.findings.extend(_check_unsupported(path, markdown))
     report.findings.extend(_check_unpublished_section(path, markdown))
+    report.findings.extend(_check_identifying(path, markdown))
     report.findings.extend(_check_unread_assertions(path, markdown, load_unread_asins()))
     report.findings.extend(_check_affiliate(path, markdown))
     report.findings.extend(_check_sentences(path, prose))
