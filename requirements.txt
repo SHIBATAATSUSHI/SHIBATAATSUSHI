@@ -1,0 +1,3 @@
+# note 自動投稿 (scripts/note_post.py)
+# インストール後に `playwright install chromium` が必要
+playwright>=1.44
