@@ -30,13 +30,13 @@ publish: false
   python scripts/note_lint.py posts/このファイル.md
 -->
 
-## 
+##
 
-## 
+##
 
-## 
+##
 
 ---
 
 参考:
-- 
+-
