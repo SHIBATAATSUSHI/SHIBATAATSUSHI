@@ -22,11 +22,14 @@ note には公開された投稿APIが存在しないため、Playwright で実�
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import re
 import sys
 import time
+import urllib.error
+import urllib.request
 import weakref
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -154,6 +157,10 @@ SEL_EYECATCH_CONFIRM = [
     "button:has-text('保存')",
     "button:has-text('適用')",
     "button:has-text('この画像を使用')",
+]
+SEL_EYECATCH_FILE = [
+    "input[type='file'][accept*='image']",
+    "input[type='file']",
 ]
 SEL_PUBLISH_CONFIRM = [
     "button:has-text('投稿する')",
@@ -451,6 +458,71 @@ def resolve_eyecatch(value: str, source: Path | None = None) -> Path:
     return path
 
 
+def _safe_image_stem(title: str) -> str:
+    """見出し画像に使える短いファイル名を作る。"""
+    stem = re.sub(r"[\\/:*?\"<>|\s]+", "-", title.strip()).strip("-")
+    return (stem[:48] or "note-eyecatch")
+
+
+def generate_eyecatch(article: Article, output_dir: Path, *, model: str) -> Path:
+    """記事の内容を基に OpenAI Images API で見出し画像を1枚作る。"""
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        raise NotePostError(
+            "画像の自動生成には OPENAI_API_KEY が必要です。\n"
+            "  export OPENAI_API_KEY='取得したAPIキー'"
+        )
+
+    excerpt = re.sub(r"[#>*_`\[\]()]", " ", article.body)
+    excerpt = re.sub(r"\s+", " ", excerpt).strip()[:1800]
+    prompt = (
+        "日本語のnote記事に使う、横長16:9の洗練された編集イラストを作成してください。\n"
+        f"記事タイトル: {article.title}\n"
+        f"記事要約素材: {excerpt}\n"
+        "本文の中心的な対比や概念を、ひと目で伝わる具体的な場面にしてください。"
+        "落ち着いたネイビー、青緑、暖色の差し色を使い、専門的で信頼できる印象にします。"
+        "サムネイルでも判別できる明快な構図にし、人物や施設を特定できる表現は避けてください。"
+        "画像内に文字、数字、ロゴ、透かしを入れないでください。"
+    )
+    payload = json.dumps(
+        {
+            "model": model,
+            "prompt": prompt,
+            "size": "1536x1024",
+            "quality": "high",
+            "output_format": "png",
+        }
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        "https://api.openai.com/v1/images/generations",
+        data=payload,
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=180) as response:
+            response_data = json.loads(response.read().decode("utf-8"))
+        encoded = response_data["data"][0]["b64_json"]
+        image = base64.b64decode(encoded, validate=True)
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")[:500]
+        raise NotePostError(
+            f"見出し画像の生成に失敗しました (HTTP {exc.code}): {body}"
+        ) from exc
+    except urllib.error.URLError as exc:
+        raise NotePostError(f"見出し画像の生成に失敗しました: {exc}") from exc
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise NotePostError("画像APIの応答から画像データを取得できませんでした。") from exc
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / f"{time.strftime('%Y-%m-%d')}-{_safe_image_stem(article.title)}.png"
+    if path.exists():
+        path = path.with_name(f"{path.stem}-{int(time.time())}{path.suffix}")
+    path.write_bytes(image)
+    print(f"見出し画像を生成しました: {_rel(path)}")
+    return path.resolve()
+
+
 def load_article(path: Path) -> Article:
     """Markdown ファイルを読み込んで Article にする。
 
@@ -710,8 +782,11 @@ _COLLECT_ELEMENTS_JS = """
     tag: el.tagName.toLowerCase(),
     text: (el.innerText || el.value || '').trim().slice(0, 40),
     testid: el.getAttribute('data-testid') || '',
+    aria: el.getAttribute('aria-label') || '',
+    title: el.getAttribute('title') || '',
     placeholder: el.getAttribute('placeholder') || '',
     cls: (el.getAttribute('class') || '').slice(0, 70),
+    html: (el.innerHTML || '').slice(0, 180),
   });
   const pick = (selector, limit) =>
     [...document.querySelectorAll(selector)].filter(visible).slice(0, limit).map(describe);
@@ -764,12 +839,18 @@ def _format_elements(elements: dict, limit: int = 12) -> str:
                 parts.append(f"placeholder={item['placeholder']}")
             if item.get("testid"):
                 parts.append(f"data-testid={item['testid']}")
+            if item.get("aria"):
+                parts.append(f"aria-label={item['aria']}")
+            if item.get("title"):
+                parts.append(f"title={item['title']}")
             if item.get("accept"):
                 parts.append(f"accept={item['accept']}")
             if item.get("hidden"):
                 parts.append("(非表示)")
             if item.get("cls"):
                 parts.append(f"class={item['cls']}")
+            if item.get("html") and not item.get("text"):
+                parts.append(f"html={item['html']}")
             lines.append("    - " + " ".join(parts))
         if len(items) > limit:
             lines.append(f"    - ...他 {len(items) - limit} 件")
@@ -1379,6 +1460,75 @@ def _save_draft(
     print(f"  [warn] {message}")
 
 
+def _upload_eyecatch(page, path: Path, shot_dir: Path | None) -> None:
+    """編集画面で見出し画像を選び、アップロード完了まで確認する。"""
+    print(f"見出し画像をアップロードしています: {_rel(path)}")
+    try:
+        button = _find(page, SEL_EYECATCH_BUTTON, timeout_ms=3000)
+    except NotePostError:
+        # 現行UIの追加ボタンは文字もaria-labelも持たない。タイトル欄の直上・
+        # 水平方向中央にある丸いボタンを位置関係で特定する。
+        index = page.evaluate(
+            """() => {
+              const title = document.querySelector("textarea[placeholder*='記事タイトル']");
+              if (!title) return -1;
+              const tr = title.getBoundingClientRect();
+              const buttons = [...document.querySelectorAll('button')];
+              let best = {index: -1, score: Infinity};
+              buttons.forEach((el, index) => {
+                const r = el.getBoundingClientRect();
+                if (!r.width || !r.height || r.bottom > tr.top || tr.top - r.bottom > 160) return;
+                const score = Math.abs((r.left + r.right) / 2 - (tr.left + tr.right) / 2)
+                  + (tr.top - r.bottom) * 0.2;
+                if (score < best.score) best = {index, score};
+              });
+              return best.index;
+            }"""
+        )
+        button = page.locator("button").nth(index) if index >= 0 else None
+        if button is None or not button.is_visible():
+            raise NotePostError(
+                "見出し画像の追加ボタンを特定できませんでした。"
+                "noteのUIが変わった可能性があります。"
+            )
+
+    # note のUIによって、クリック直後に file chooser が出る場合と、
+    # ダイアログ内の「画像をアップロード」をもう一度押す場合がある。
+    try:
+        with page.expect_file_chooser(timeout=2500) as chooser_info:
+            button.click()
+        chooser_info.value.set_files(str(path))
+    except Exception:
+        page.wait_for_timeout(800)
+        file_input = None
+        for selector in SEL_EYECATCH_FILE:
+            candidate = page.locator(selector).last
+            if candidate.count() > 0:
+                file_input = candidate
+                break
+        if file_input is not None:
+            file_input.set_input_files(str(path))
+        else:
+            upload = _find(page, SEL_EYECATCH_UPLOAD, timeout_ms=8000)
+            with page.expect_file_chooser(timeout=5000) as chooser_info:
+                upload.click()
+            chooser_info.value.set_files(str(path))
+
+    page.wait_for_timeout(3500)
+    # トリミング画面が出る版では確定操作が必要。出ない版はそのままでよい。
+    for selector in SEL_EYECATCH_CONFIRM:
+        try:
+            confirm = page.locator(selector).last
+            if confirm.count() > 0 and confirm.is_visible():
+                confirm.click()
+                page.wait_for_timeout(2500)
+                break
+        except Exception:
+            continue
+    _shot(page, shot_dir, "eyecatch-uploaded")
+    print("  見出し画像の設定操作が完了しました。")
+
+
 
 
 
@@ -1469,6 +1619,12 @@ def _run_browser(account: Account, args, work) -> int:
 def cmd_post(args, accounts: dict[str, Account], default_key: str | None) -> int:
     """新規記事を作成する。"""
     article = load_article(Path(args.file))
+    if args.eyecatch:
+        article.eyecatch = resolve_eyecatch(args.eyecatch, Path(args.file))
+    if args.generate_eyecatch:
+        article.eyecatch = generate_eyecatch(
+            article, Path(args.eyecatch_dir), model=args.image_model
+        )
     account = _resolve_for_article(args, article, accounts, default_key)
 
     if article.note_url and not args.allow_duplicate:
@@ -1496,6 +1652,8 @@ def cmd_post(args, accounts: dict[str, Account], default_key: str | None) -> int
         print("\nエディタを開いています...")
         _open_editor(page, account, NEW_NOTE_URL, shot_dir)
         _write_article(page, article, args)
+        if article.eyecatch:
+            _upload_eyecatch(page, article.eyecatch, shot_dir)
         _report_written(page, article)
         _shot(page, shot_dir, f"{account.key}-editor")
         editor_url = page.url
@@ -2012,6 +2170,23 @@ def build_parser() -> argparse.ArgumentParser:
             "--account", help="アカウントキー(未指定なら front matter / 既定値)"
         )
         sub_parser.add_argument("--file", required=True, help="対象の Markdown ファイル")
+        image_group = sub_parser.add_mutually_exclusive_group()
+        image_group.add_argument(
+            "--eyecatch", help="front matter を上書きする見出し画像のパス"
+        )
+        image_group.add_argument(
+            "--generate-eyecatch",
+            action="store_true",
+            help="記事内容から見出し画像を自動生成してアップロードする",
+        )
+        sub_parser.add_argument(
+            "--eyecatch-dir",
+            default=str(REPO_ROOT / "images" / "generated"),
+            help="自動生成画像の保存先",
+        )
+        sub_parser.add_argument(
+            "--image-model", default="gpt-image-1", help="画像生成に使うOpenAIモデル"
+        )
         sub_parser.add_argument("--publish", action="store_true", help="下書きではなく公開する")
         sub_parser.add_argument(
             "--draft", action="store_true", help="front matter を無視して下書きにする"

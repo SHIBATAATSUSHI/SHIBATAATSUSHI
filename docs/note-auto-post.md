@@ -133,9 +133,17 @@ publish: false
 
 画像の生成は GPT 側の担当。画風の仕様は `docs/note-strategy.md` を正とする。
 
-なお **note への貼り付け自体はまだ未実装**。編集画面のボタンのDOMを実機で採取して
-から実装する(「画面診断」節の `--stage` を参照)。いまは `--dry-run` と実行前表示に
-出るところまで。
+`eyecatch` に指定した画像は、本文の入力後にnoteへ自動アップロードする。画像がない場合は、
+記事本文から画像を生成してそのまま下書きへ設定できる。
+
+```bash
+export OPENAI_API_KEY="取得したAPIキー"
+python scripts/note_post.py post --file posts/example.md --generate-eyecatch
+```
+
+生成画像は既定で `images/generated/` に保存される。APIキーはファイルへ書かず、環境変数で渡す。
+既存画像を一度だけ指定する場合は front matter を変更せず `--eyecatch images/example.png`
+でもよい。どちらの場合も既定動作は下書き保存で、公開は行わない。
 
 ## 3. 公開前チェック
 
